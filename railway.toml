@@ -1,5 +1,4 @@
 [build]
-builder = "RAILPACKS"
 buildCommand = "bash build-railway.sh"
 
 [deploy]

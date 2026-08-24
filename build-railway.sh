@@ -13,6 +13,7 @@ fi
 # puis livré sous forme d’artefact statique. Railpack détecte Python à cause du
 # backend FastAPI et ne fournit pas toujours Node/PNPM dans l’image de build.
 # Cette étape évite Docker tout en déployant exactement le build PNPM validé.
+mkdir -p "$RELEASE_DIR/autocommerce-app/dist"
 tar -xzf "$PREBUILT_FRONTEND" -C "$RELEASE_DIR/autocommerce-app/dist"
 
 # Garantir que FastAPI peut servir aussi le même build via main.py si nécessaire.

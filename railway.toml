@@ -1,0 +1,10 @@
+[build]
+builder = "RAILPACKS"
+buildCommand = "bash build-railway.sh"
+
+[deploy]
+startCommand = "bash start-railway.sh"
+healthcheckPath = "/health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

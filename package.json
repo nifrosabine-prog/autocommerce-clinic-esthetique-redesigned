@@ -1,0 +1,9 @@
+{
+  "name": "autocommerce-clinic-esthetique-railway",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=20"
+  }
+}

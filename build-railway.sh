@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ARCHIVE="clinic_esthetique_redesigned_ready_to_go (2).zip"
+ARCHIVE="clinic_esthetique_redesigned_ready_to_go_railway_asyncpg.zip"
 RELEASE_DIR="aesthetic_release_v3_final"
 PREBUILT_FRONTEND="frontend-dist.tar.gz"
 

@@ -1,20 +1,69 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
-ARCHIVE="clinic_esthetique_redesigned_audit_global.zip"
-RELEASE_DIR="aesthetic_release_v3_final"
-PREBUILT_FRONTEND="frontend-dist.tar.gz"
+
+
+
+ARCHIVE="AutoCommerce-Clinic-RBAC-Workflow-Corrige-GitHub.zip"
+
+RELEASE_DIR="aesthetic_release_latest"
+
 rm -rf "$RELEASE_DIR"
+
 mkdir -p "$RELEASE_DIR"
-unzip -q -o "$ARCHIVE" -d "$RELEASE_DIR"
-if [ -d "$RELEASE_DIR/app" ]; then
-  shopt -s dotglob
-  mv "$RELEASE_DIR/app"/* "$RELEASE_DIR/"
-  rmdir "$RELEASE_DIR/app"
-  shopt -u dotglob
+
+
+
+unzip -q -o "$ARCHIVE" -d "$RELEASE_DIR/.extracted"
+
+shopt -s dotglob
+
+ROOT_DIR="$RELEASE_DIR/.extracted"
+
+if [ -d "$ROOT_DIR/autocommerce-clinic-github-final" ]; then
+
+  ROOT_DIR="$ROOT_DIR/autocommerce-clinic-github-final"
+  
 fi
-mkdir -p "$RELEASE_DIR/autocommerce-app/dist"
-tar -xzf "$PREBUILT_FRONTEND" -C "$RELEASE_DIR/autocommerce-app/dist"
-rm -rf "$RELEASE_DIR/api-server/web-dist"
-cp -R "$RELEASE_DIR/autocommerce-app/dist/public" "$RELEASE_DIR/api-server/web-dist"
+
+cp -a "$ROOT_DIR"/. "$RELEASE_DIR"/
+
+rm -rf "$RELEASE_DIR/.extracted"
+
+
+
+if [ ! -d "$RELEASE_DIR/api-server" ] || [ ! -d "$RELEASE_DIR/autocommerce-app" ]; then
+
+  echo "Archive layout invalid: expected api-server/ and autocommerce-app/" >&2
+  
+  exit 1
+  
+fi
+
+
+
+cd "$RELEASE_DIR/autocommerce-app"
+
+corepack enable
+
+pnpm install --frozen-lockfile
+
+pnpm build
+
+
+
+rm -rf "../api-server/web-dist"
+
+mkdir -p "../api-server/web-dist"
+
+cp -R dist/public/. "../api-server/web-dist/"
+
+
+
 echo "Prepared release directory: $RELEASE_DIR"
-echo "Frontend bundle: $RELEASE_DIR/autocommerce-app/dist/public"
+
+echo "Frontend bundle: $RELEASE_DIR/api-server/web-dist"
+
+
+
+

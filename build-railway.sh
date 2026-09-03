@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+
+
 set -euo pipefail
 
 
@@ -7,6 +9,8 @@ set -euo pipefail
 ARCHIVE="AutoCommerce-Clinic-RBAC-Workflow-Corrige-GitHub.zip"
 
 RELEASE_DIR="aesthetic_release_latest"
+
+
 
 rm -rf "$RELEASE_DIR"
 
@@ -42,9 +46,47 @@ fi
 
 
 
-cd "$RELEASE_DIR/autocommerce-app"
+# The Railway Python image may not provide Node.js/corepack. Install a local Node runtime
 
-corepack enable
+# and PNPM so the frontend build is reproducible and does not depend on the base image.
+
+if ! command -v node >/dev/null 2>&1; then
+
+  NODE_VERSION=22.14.0
+  
+  NODE_DIR="$HOME/.railway-node-v$NODE_VERSION"
+  
+  if [ ! -x "$NODE_DIR/bin/node" ]; then
+  
+    mkdir -p "$HOME/.railway-node"
+    
+    curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" -o "$HOME/.railway-node/node.tar.xz"
+    
+    rm -rf "$NODE_DIR"
+    
+    mkdir -p "$NODE_DIR"
+    
+    tar -xJf "$HOME/.railway-node/node.tar.xz" --strip-components=1 -C "$NODE_DIR"
+    
+    rm -f "$HOME/.railway-node/node.tar.xz"
+    
+  fi
+  
+  export PATH="$NODE_DIR/bin:$PATH"
+  
+fi
+
+
+
+if ! command -v pnpm >/dev/null 2>&1; then
+
+  npm install --global pnpm@9.15.0
+  
+fi
+
+
+
+cd "$RELEASE_DIR/autocommerce-app"
 
 pnpm install --frozen-lockfile
 
@@ -63,6 +105,16 @@ cp -R dist/public/. "../api-server/web-dist/"
 echo "Prepared release directory: $RELEASE_DIR"
 
 echo "Frontend bundle: $RELEASE_DIR/api-server/web-dist"
+
+
+
+
+
+
+
+
+
+
 
 
 

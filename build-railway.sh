@@ -72,7 +72,7 @@ fi
 
 cd "$RELEASE_DIR/autocommerce-app"
 
-pnpm install --frozen-lockfile
+pnpm install --no-frozen-lockfile
 
 pnpm build
 

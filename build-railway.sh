@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ARCHIVE="AutoCommerce-Clinic-RBAC-Workflow-Corrige-GitHub-fixed-v2.zip"
+ARCHIVE="AutoCommerce-Clinic-Final-Devise-20260904.zip"
 
 RELEASE_DIR="aesthetic_release_latest"
 
@@ -85,17 +85,3 @@ cp -R dist/public/. "../api-server/web-dist/"
 echo "Prepared release directory: $RELEASE_DIR"
 
 echo "Frontend bundle: $RELEASE_DIR/api-server/web-dist"
-
-
-
-
-
-
-
-
-
-
-
-
-
-

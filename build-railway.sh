@@ -22,6 +22,12 @@ if [ -d "$ROOT_DIR/autocommerce-clinic-github-final" ]; then
   
 fi
 
+if [ -d "$ROOT_DIR/autocommerce" ]; then
+
+  ROOT_DIR="$ROOT_DIR/autocommerce"
+
+fi
+
 cp -a "$ROOT_DIR"/. "$RELEASE_DIR"/
 
 rm -rf "$RELEASE_DIR/.extracted"

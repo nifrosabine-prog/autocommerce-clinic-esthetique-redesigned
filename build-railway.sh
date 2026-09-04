@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-ARCHIVE="AutoCommerce-Clinic-Final-Devise-20260904-teamfix.zip"
+ARCHIVE="AutoCommerce-Clinic-Final-Devise-20260904-teamfix-v2.zip"
 
 RELEASE_DIR="aesthetic_release_latest"
 

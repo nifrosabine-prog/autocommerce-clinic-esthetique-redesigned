@@ -1,0 +1,230 @@
+"""Tests — services/dossier_medical.py
+
+Couvre le chiffrement Fernet des observations et la règle métier la
+plus critique : impossible de créer un dossier médical sans
+consentement signé et valide.
+"""
+from datetime import datetime
+
+import pytest
+
+from services.dossier_medical import (
+    encrypt_field, decrypt_field, create_dossier, close_dossier, get_timeline_patient,
+)
+from models.database import AuditLogMedical, Facture, SuiviPostActe
+from services.factures import create_facture
+from sqlalchemy import select
+
+
+# ── Chiffrement ───────────────────────────────────────────────
+
+def test_encrypt_decrypt_roundtrip():
+    plaintext = "Antécédent : allergie lidocaïne"
+    ciphertext = encrypt_field(plaintext)
+    assert ciphertext != plaintext
+    assert decrypt_field(ciphertext) == plaintext
+
+
+def test_encrypt_empty_string_returns_empty():
+    assert encrypt_field("") == ""
+
+
+def test_decrypt_empty_string_returns_empty():
+    assert decrypt_field("") == ""
+
+
+def test_ciphertext_is_not_plaintext_substring():
+    """Vérifie qu'aucun fragment lisible du texte original ne traîne
+    dans le ciphertext (Fernet = AES + HMAC, donc déjà garanti, mais
+    on verrouille le comportement observable)."""
+    plaintext = "DonneeSensibleUnique12345"
+    ciphertext = encrypt_field(plaintext)
+    assert plaintext not in ciphertext
+
+
+# ── create_dossier : garde-fou consentement ──────────────────
+
+@pytest.mark.asyncio
+async def test_create_dossier_fails_without_consent(db, patient, medecin, acte):
+    with pytest.raises(ValueError, match="[Cc]onsentement"):
+        await create_dossier(
+            patient_id=patient.id,
+            praticien_id=medecin.id,
+            rdv_id=None,
+            data={"acte_id": acte.id, "observations": "test"},
+            db=db,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_draft_dossier_does_not_require_consent_or_trigger_billing(db, patient, medecin, acte):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={"acte_id": acte.id, "observations": "Note de consultation en cours", "statut_clinique": "brouillon"},
+        db=db,
+    )
+    assert dossier.statut_clinique == "brouillon"
+    assert dossier.statut_facturation == "brouillon"
+
+
+@pytest.mark.asyncio
+async def test_close_draft_requires_consent_then_closes(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={"acte_id": acte.id, "observations": "Note en attente de signature", "statut_clinique": "brouillon"},
+        db=db,
+    )
+    closed = await close_dossier(
+        patient_id=patient.id,
+        dossier_id=dossier.id,
+        praticien_id=medecin.id,
+        db=db,
+    )
+    assert closed.statut_clinique == "cloture"
+    assert closed.statut_facturation == "en_attente"
+
+
+@pytest.mark.asyncio
+async def test_create_dossier_reconciles_invoice_created_first(db, patient, medecin, acte, consentement_valide):
+    await create_facture({
+        "patient_id": patient.id,
+        "actes": [{"description": "Botox front", "prix": "250.000", "quantite": 1}],
+    }, created_by=medecin.id, db=db)
+
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={
+            "acte_id": acte.id,
+            "observations": "Bonne tolérance",
+            "actes_details": [{"nom": "Botox front", "prix": 250.0}],
+        },
+        db=db,
+    )
+
+    await db.refresh(dossier)
+    invoice = (await db.execute(select(Facture).where(Facture.patient_id == patient.id))).scalar_one()
+    assert dossier.statut_facturation == "facture"
+    assert invoice.dossier_id == dossier.id
+
+
+@pytest.mark.asyncio
+async def test_create_dossier_succeeds_with_valid_consent(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={"acte_id": acte.id, "observations": "Bonne tolérance"},
+        db=db,
+    )
+    assert dossier.id is not None
+    # Les observations doivent être chiffrées en base, jamais en clair
+    assert dossier.observations_enc != "Bonne tolérance"
+    assert decrypt_field(dossier.observations_enc) == "Bonne tolérance"
+
+
+@pytest.mark.asyncio
+async def test_closed_dossier_with_followup_creates_persistent_post_acte_reminder(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={
+            "acte_id": acte.id,
+            "observations": "Contrôle requis",
+            "suivi_requis": True,
+            "date_suivi_recommandee": datetime(2030, 1, 20).date(),
+        },
+        db=db,
+    )
+    followup = await db.scalar(select(SuiviPostActe).where(SuiviPostActe.dossier_id == dossier.id))
+    assert followup is not None
+    assert followup.statut == "a_faire"
+    assert followup.assigne_a_id == medecin.id
+
+
+@pytest.mark.asyncio
+async def test_create_dossier_writes_audit_log(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={"acte_id": acte.id, "observations": "obs"},
+        db=db,
+        ip_address="10.0.0.5",
+    )
+    result = await db.execute(
+        select(AuditLogMedical).where(AuditLogMedical.resource_id == dossier.id)
+    )
+    log = result.scalar_one_or_none()
+    assert log is not None
+    assert log.action == "CREATE_DOSSIER"
+    assert log.patient_id == patient.id
+    assert log.ip_address == "10.0.0.5"
+
+
+@pytest.mark.asyncio
+async def test_create_dossier_without_observations_leaves_field_none(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id,
+        praticien_id=medecin.id,
+        rdv_id=None,
+        data={"acte_id": acte.id},
+        db=db,
+    )
+    assert dossier.observations_enc is None
+
+
+@pytest.mark.asyncio
+async def test_get_timeline_patient_decrypts_observations(db, patient, medecin, acte, consentement_valide):
+    dossier = await create_dossier(
+        patient_id=patient.id, praticien_id=medecin.id, rdv_id=None,
+        data={"acte_id": acte.id, "observations": "Rougeur légère 24h"},
+        db=db,
+    )
+    facture = await create_facture({
+        "patient_id": patient.id,
+        "dossier_id": dossier.id,
+        "actes": [{"description": acte.nom, "prix": "180.000", "quantite": 1}],
+    }, created_by=medecin.id, db=db)
+    timeline = await get_timeline_patient(patient.id, db)
+    assert len(timeline) == 1
+    assert timeline[0]["observations"] == "Rougeur légère 24h"
+    assert timeline[0]["statut_facturation"] == "facture"
+    assert timeline[0]["facture_id"] == facture.id
+    assert timeline[0]["facture_numero"] == facture.numero_facture
+
+
+@pytest.mark.asyncio
+async def test_get_timeline_patient_empty_for_unknown_patient(db):
+    timeline = await get_timeline_patient(999999, db)
+    assert timeline == []
+
+
+@pytest.mark.asyncio
+async def test_get_timeline_patient_logs_read_access_when_user_provided(db, patient, medecin, acte, consentement_valide):
+    await create_dossier(
+        patient_id=patient.id, praticien_id=medecin.id, rdv_id=None,
+        data={"acte_id": acte.id, "observations": "obs"}, db=db,
+    )
+    await get_timeline_patient(patient.id, db, utilisateur_id=medecin.id, ip_address="10.0.0.9")
+
+    result = await db.execute(
+        select(AuditLogMedical).where(AuditLogMedical.action == "READ_TIMELINE")
+    )
+    log = result.scalar_one_or_none()
+    assert log is not None
+    assert log.utilisateur_id == medecin.id
+    assert log.ip_address == "10.0.0.9"
+
+
+@pytest.mark.asyncio
+async def test_get_timeline_patient_does_not_log_without_user(db, patient):
+    await get_timeline_patient(patient.id, db)
+    result = await db.execute(select(AuditLogMedical))
+    assert result.scalars().all() == []

@@ -89,27 +89,29 @@ export default function ReportingRH() {
     }
   };
 
-  const handleExportPdf = async () => {
-    if (!report || !selectedUserId) {
-      toast.error('Générez d’abord un rapport avant de l’exporter.');
+  const handleDownloadCsv = async () => {
+    if (!selectedUserId) {
+      toast.error('Veuillez sélectionner un employé');
       return;
     }
     try {
-      const response = await api.get('/pointage/admin/rapport.pdf', {
+      const response = await api.get('/pointage/admin/rapport.csv', {
         params: { utilisateur_id: selectedUserId, date_debut: dateDebut, date_fin: dateFin },
         responseType: 'blob',
       });
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const contentDisposition = response.headers['content-disposition'] as string | undefined;
+      const filename = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] || `reporting-rh-${selectedUserId}.csv`;
+      const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `rapport-rh-${dateDebut}-${dateFin}.pdf`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Rapport PDF téléchargé.');
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Impossible d’exporter le rapport PDF.');
+      URL.revokeObjectURL(url);
+      toast.success('Export CSV téléchargé');
+    } catch (err) {
+      toast.error('Erreur lors du téléchargement CSV');
     }
   };
 
@@ -159,10 +161,16 @@ export default function ReportingRH() {
                 <Label htmlFor="end">Au</Label>
                 <Input id="end" type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} />
               </div>
-              <Button onClick={handleGenerateReport} disabled={isLoading}>
-                {isLoading ? <Spinner className="w-4 h-4 mr-2" /> : <Search className="w-4 h-4 mr-2" />}
-                Générer
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={handleGenerateReport} disabled={isLoading}>
+                  {isLoading ? <Spinner className="w-4 h-4 mr-2" /> : <Search className="w-4 h-4 mr-2" />}
+                  Générer
+                </Button>
+                <Button variant="outline" onClick={handleDownloadCsv} disabled={!selectedUserId} title="Télécharger les pointages du personnel sélectionné">
+                  <Download className="w-4 h-4 mr-2" />
+                  CSV
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -218,11 +226,8 @@ export default function ReportingRH() {
             </div>
 
             <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
-              <CardTitle className="text-lg text-[#071a3b]">Détail quotidien</CardTitle>
-              <Button type="button" variant="outline" onClick={handleExportPdf}>
-                <Download className="mr-2 h-4 w-4" /> Exporter PDF
-              </Button>
+              <CardHeader>
+                <CardTitle className="text-lg text-[#071a3b]">Détail quotidien</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <Table>

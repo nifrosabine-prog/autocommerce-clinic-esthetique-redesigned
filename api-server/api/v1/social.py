@@ -24,6 +24,17 @@ from services.reputation import (
 
 router = APIRouter(prefix="/social", tags=["social-crm"])
 
+# Les rôles cliniques peuvent consulter les données de leur tenant.
+# Les opérations d’écriture/publication restent protégées par leurs gates dédiés.
+_SOCIAL_READ_ROLES = (
+    RoleEnum.DIRECTRICE,
+    RoleEnum.ASSISTANTE,
+    RoleEnum.COMMERCIAL,
+    RoleEnum.ADMIN,
+    RoleEnum.MEDECIN,
+    RoleEnum.ESTHETICIENNE,
+)
+
 
 class InboundMessage(BaseModel):
     plateforme: str
@@ -85,6 +96,31 @@ class MetriquesUpdate(BaseModel):
     impressions: int = 0
 
 
+@router.get("/integrations/status")
+async def integrations_status_route(
+    current_user=Depends(require_role(*_SOCIAL_READ_ROLES)),
+):
+    """Expose uniquement l'état de configuration, jamais les secrets."""
+    settings = get_settings()
+    allowlist = settings.allowed_external_integrations
+    whatsapp_configured = bool(settings.wa_business_token and settings.wa_phone_id)
+    return {
+        "whatsapp": {
+            "configured": whatsapp_configured,
+            "enabled": bool(settings.whatsapp_enabled),
+            "allowed": "whatsapp" in allowlist,
+            "ready": whatsapp_configured and settings.whatsapp_enabled and "whatsapp" in allowlist,
+        },
+        "ai": {
+            "configured": bool(settings.openai_api_key),
+            "enabled": bool(settings.llm_enabled),
+            "approved": bool(settings.medical_ai_provider_approved),
+            "allowed": "ai" in allowlist,
+            "ready": bool(settings.openai_api_key and settings.llm_enabled and settings.medical_ai_provider_approved and "ai" in allowlist),
+        },
+    }
+
+
 # ── Inbox ──────────────────────────────────────────────────
 
 @router.post("/messages/webhook", status_code=status.HTTP_201_CREATED)
@@ -117,7 +153,7 @@ async def list_messages_route(
     plateforme: Optional[str] = Query(None),
     statut: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.COMMERCIAL, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(*_SOCIAL_READ_ROLES)),
 ):
     clinic_id = current_user.get("clinic_id")
     if clinic_id is None:
@@ -168,7 +204,7 @@ async def list_posts_route(
     plateforme: Optional[str] = Query(None),
     statut: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.COMMERCIAL, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(*_SOCIAL_READ_ROLES)),
 ):
     clinic_id = current_user.get("clinic_id")
     if clinic_id is None:
@@ -217,7 +253,7 @@ async def metriques_route(
 @router.get("/analytics")
 async def analytics_route(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.COMMERCIAL, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(*_SOCIAL_READ_ROLES)),
 ):
     clinic_id = current_user.get("clinic_id")
     if clinic_id is None:
@@ -235,7 +271,7 @@ async def list_avis(
         "Correctif Bug #8 : valeurs normalisées en minuscules via PlateformeAvis.",
     ),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(*_SOCIAL_READ_ROLES)),
 ):
     """Liste les avis clients récoltés."""
     # Correctif Bug #8 (audit) : on valide/normalise le query param

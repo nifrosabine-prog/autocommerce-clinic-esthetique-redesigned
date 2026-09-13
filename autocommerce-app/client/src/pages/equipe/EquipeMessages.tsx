@@ -43,6 +43,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Mail, MailOpen, Send, Trash2, Plus, Eye } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { equipeApi, EquipeMessage, EquipeMember } from '@/lib/api';
 
 // ── Types ────────────────────────────────────────────────────
@@ -59,10 +60,12 @@ export default function EquipeMessages() {
 
   // Composition
   const [composeOpen, setComposeOpen] = useState(false);
-  const [destinataireId, setDestinataireId] = useState('');
+  const [selectedDestinataireIds, setSelectedDestinataireIds] = useState<number[]>([]);
+  const [recipientSearch, setRecipientSearch] = useState('');
   const [sujet, setSujet] = useState('');
   const [contenu, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState('');
   const [utilisateurs, setUtilisateurs] = useState<EquipeMember[]>([]);
 
   // Lecture
@@ -125,20 +128,23 @@ export default function EquipeMessages() {
   // ── Handlers ──────────────────────────────────────────────
 
   const handleSend = async () => {
-    if (!destinataireId || !sujet.trim() || !contenu.trim()) {
+    if (selectedDestinataireIds.length === 0 || !sujet.trim() || !contenu.trim()) {
       toast.error('Tous les champs sont obligatoires');
       return;
     }
     setIsSending(true);
     try {
       await equipeApi.send({
-        destinataire_id: parseInt(destinataireId),
+        destinataire_ids: selectedDestinataireIds,
+        idempotency_key: idempotencyKey || (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
         sujet: sujet.trim(),
         contenu: contenu.trim(),
       });
       toast.success('Message envoyé avec succès');
       setComposeOpen(false);
-      setDestinataireId('');
+      setSelectedDestinataireIds([]);
+      setRecipientSearch('');
+      setIdempotencyKey('');
       setSujet('');
       setContent('');
       loadMessages();
@@ -211,7 +217,7 @@ export default function EquipeMessages() {
               Communication interne entre les membres de la clinique
             </p>
           </div>
-          <Button onClick={() => { void loadUtilisateurs(); setComposeOpen(true); }}>
+          <Button onClick={() => { void loadUtilisateurs(); setIdempotencyKey(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`); setComposeOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             Nouveau message
           </Button>
@@ -379,24 +385,41 @@ export default function EquipeMessages() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Nouveau message</DialogTitle>
-            <DialogDescription>
-              Envoyez un message à un membre de l'équipe.
+                          <DialogDescription>
+              Envoyez un message à un ou plusieurs membres actifs de l'équipe.
             </DialogDescription>
+
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="destinataire">Destinataire</Label>
-              <Select value={destinataireId} onValueChange={setDestinataireId}>
-                <SelectTrigger id="destinataire"><SelectValue placeholder="Choisir un membre de l’équipe" /></SelectTrigger>
-                <SelectContent>
-                  {utilisateurs.map((member) => (
-                    <SelectItem key={member.id} value={String(member.id)}>
-                      {member.prenom} {member.nom} — {member.role}
-                    </SelectItem>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="destinataire-search">Destinataires ({selectedDestinataireIds.length})</Label>
+                <div className="flex gap-2 text-xs">
+                  <button type="button" className="text-primary hover:underline" onClick={() => setSelectedDestinataireIds(utilisateurs.map((member) => member.id))}>Toute l’équipe</button>
+                  <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedDestinataireIds([])}>Tout désélectionner</button>
+                </div>
+              </div>
+              <Input
+                id="destinataire-search"
+                placeholder="Rechercher un membre..."
+                value={recipientSearch}
+                onChange={(e) => setRecipientSearch(e.target.value)}
+              />
+              <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
+                {utilisateurs
+                  .filter((member) => `${member.prenom} ${member.nom} ${member.role}`.toLowerCase().includes(recipientSearch.toLowerCase()))
+                  .map((member) => (
+                    <label key={member.id} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-muted cursor-pointer">
+                      <Checkbox
+                        checked={selectedDestinataireIds.includes(member.id)}
+                        onCheckedChange={(checked) => setSelectedDestinataireIds((current) => checked ? Array.from(new Set([...current, member.id])) : current.filter((id) => id !== member.id))}
+                      />
+                      <span className="text-sm">{member.prenom} {member.nom} — {member.role} ({member.email})</span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
-              {utilisateurs.length === 0 && <p className="text-xs text-muted-foreground">Aucun autre membre actif disponible.</p>}
+                {utilisateurs.length === 0 && <p className="text-xs text-muted-foreground px-2 py-1">Aucun autre membre actif disponible.</p>}
+              </div>
+              {selectedDestinataireIds.length > 0 && <p className="text-xs text-muted-foreground">Sélectionnés : {utilisateurs.filter((member) => selectedDestinataireIds.includes(member.id)).map((member) => `${member.prenom} ${member.nom}`).join(', ')}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="sujet">Sujet</Label>
@@ -422,7 +445,7 @@ export default function EquipeMessages() {
             <Button variant="outline" onClick={() => setComposeOpen(false)}>
               Annuler
             </Button>
-            <Button onClick={handleSend} disabled={isSending || !destinataireId}>
+            <Button onClick={handleSend} disabled={isSending || selectedDestinataireIds.length === 0}>
               {isSending ? <Spinner className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
               Envoyer
             </Button>

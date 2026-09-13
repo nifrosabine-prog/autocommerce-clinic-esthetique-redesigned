@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,261 +6,75 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight, ClipboardList, FileText, Plus, Search, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
+interface Post { id: number; titre: string; description?: string | null; statut: 'ouvert' | 'ferme'; created_at: string; }
 interface Candidate {
-  id: number;
-  poste: string;
-  nom_candidat: string;
-  email: string;
-  telephone: string | null;
+  id: number; poste: string; poste_id?: number | null; nom_candidat: string; email: string;
+  telephone: string | null; cv_url?: string | null; lettre_url?: string | null;
   statut: 'recu' | 'en_etude' | 'entretien' | 'accepte' | 'refuse';
-  created_at: string;
+  notes_rh?: string | null; date_entretien?: string | null;
+  analyse_ia_statut?: 'non_demandee' | 'indisponible' | 'terminee'; analyse_ia_resume?: string | null;
+  analyse_ia_score?: number | null; created_at: string;
 }
+interface HistoryRow { id: number; ancien_statut?: string | null; nouveau_statut: string; notes_rh?: string | null; changed_at: string; }
 
-const NEXT_STATUS: Record<string, string> = {
-  recu: 'en_etude',
-  en_etude: 'entretien',
-  entretien: 'accepte',
-};
-
+const NEXT_STATUS: Record<string, string> = { recu: 'en_etude', en_etude: 'entretien', entretien: 'accepte' };
 const STATUT_INFO: Record<string, { label: string; color: string }> = {
-  recu: { label: 'Reçu', color: 'bg-blue-100 text-blue-800' },
-  en_etude: { label: 'En étude', color: 'bg-yellow-100 text-yellow-800' },
-  entretien: { label: 'Entretien', color: 'bg-purple-100 text-purple-800' },
-  accepte: { label: 'Accepté', color: 'bg-green-100 text-green-800' },
-  refuse: { label: 'Refusé', color: 'bg-red-100 text-red-800' },
+  recu: { label: 'Reçu', color: 'bg-blue-100 text-blue-800' }, en_etude: { label: 'En étude', color: 'bg-yellow-100 text-yellow-800' },
+  entretien: { label: 'Entretien', color: 'bg-purple-100 text-purple-800' }, accepte: { label: 'Accepté', color: 'bg-green-100 text-green-800' }, refuse: { label: 'Refusé', color: 'bg-red-100 text-red-800' },
 };
 
 export default function RecruitmentPage() {
   const { user } = useAuth();
   const canManage = ['directrice', 'assistante', 'admin'].includes(user?.role || '');
-  const [isLoading, setIsLoading] = useState(true);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [loading, setLoading] = useState(true); const [candidates, setCandidates] = useState<Candidate[]>([]); const [posts, setPosts] = useState<Post[]>([]);
+  const [statusFilter, setStatusFilter] = useState(''); const [search, setSearch] = useState(''); const [createOpen, setCreateOpen] = useState(false); const [postOpen, setPostOpen] = useState(false); const [selected, setSelected] = useState<Candidate | null>(null);
 
-  useEffect(() => {
-    loadCandidates();
-  }, []);
+  const load = async () => { try { setLoading(true); const [c, p] = await Promise.all([api.get('/recrutement'), api.get('/recrutement/postes')]); setCandidates(Array.isArray(c.data) ? c.data : []); setPosts(Array.isArray(p.data) ? p.data : []); } catch { toast.error('Erreur lors du chargement du recrutement'); } finally { setLoading(false); } };
+  useEffect(() => { load(); }, []);
+  const filtered = useMemo(() => candidates.filter(c => (!statusFilter || c.statut === statusFilter) && (!search || `${c.nom_candidat} ${c.email} ${c.poste}`.toLowerCase().includes(search.toLowerCase()))), [candidates, statusFilter, search]);
+  const counts = useMemo(() => candidates.reduce<Record<string, number>>((a, c) => { a[c.statut] = (a[c.statut] || 0) + 1; return a; }, {}), [candidates]);
 
-  const loadCandidates = async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get('/recrutement');
-      // Le backend renvoie un tableau brut, pas { candidatures: [...] }
-      setCandidates(Array.isArray(response.data) ? response.data : []);
-    } catch (err: any) {
-      console.error('Failed to load candidates:', err);
-      toast.error('Erreur lors du chargement des candidatures');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const changeStatus = async (candidate: Candidate, statut: string) => { try { await api.patch(`/recrutement/${candidate.id}/statut`, { statut }); toast.success('Statut mis à jour'); await load(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Transition impossible'); } };
+  const refuse = (c: Candidate) => changeStatus(c, 'refuse');
 
-  const handleAdvance = async (candidate: Candidate) => {
-    const next = NEXT_STATUS[candidate.statut];
-    if (!next) return;
-    try {
-      setUpdatingId(candidate.id);
-      await api.patch(`/recrutement/${candidate.id}/statut`, { statut: next });
-      toast.success('Statut mis à jour');
-      loadCandidates();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la mise à jour');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleRefuse = async (candidate: Candidate) => {
-    try {
-      setUpdatingId(candidate.id);
-      await api.patch(`/recrutement/${candidate.id}/statut`, { statut: 'refuse' });
-      toast.success('Candidature refusée');
-      loadCandidates();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la mise à jour');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-96"><Spinner /></div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Recrutement</h1>
-            <p className="text-muted-foreground mt-1">Gestion des candidatures</p>
-          </div>
-          {canManage && (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Nouvelle candidature
-            </Button>
-          )}
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Flux de candidature</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            <p>Reçu → En étude → Entretien → Accepté / Refusé</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            {candidates.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucune candidature</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Candidat</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Téléphone</TableHead>
-                      <TableHead>Poste</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {candidates.map((candidate) => {
-                      const s = STATUT_INFO[candidate.statut] || { label: candidate.statut, color: 'bg-gray-100 text-gray-800' };
-                      const canAdvance = canManage && !!NEXT_STATUS[candidate.statut];
-                      const canRefuse = canManage && candidate.statut !== 'accepte' && candidate.statut !== 'refuse';
-                      return (
-                        <TableRow key={candidate.id}>
-                          <TableCell className="font-medium">{candidate.nom_candidat}</TableCell>
-                          <TableCell className="text-sm">{candidate.email}</TableCell>
-                          <TableCell className="text-sm">{candidate.telephone || '—'}</TableCell>
-                          <TableCell className="text-sm">{candidate.poste}</TableCell>
-                          <TableCell>
-                            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {new Date(candidate.created_at).toLocaleDateString('fr-FR')}
-                          </TableCell>
-                          <TableCell className="space-x-2">
-                            {canAdvance && (
-                              <Button variant="outline" size="sm" onClick={() => handleAdvance(candidate)} disabled={updatingId === candidate.id}>
-                                <ChevronRight className="w-4 h-4 mr-1" /> Avancer
-                              </Button>
-                            )}
-                            {canRefuse && (
-                              <Button variant="ghost" size="sm" onClick={() => handleRefuse(candidate)} disabled={updatingId === candidate.id}>
-                                Refuser
-                              </Button>
-                            )}
-                            {!canAdvance && !canRefuse && (
-                              <Button variant="ghost" size="sm" disabled>Terminé</Button>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <NewCandidateDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={loadCandidates} />
-    </DashboardLayout>
-  );
+  if (loading) return <DashboardLayout><div className="flex items-center justify-center h-96"><Spinner /></div></DashboardLayout>;
+  return <DashboardLayout><div className="space-y-6">
+    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><h1 className="text-3xl font-bold">Recrutement</h1><p className="text-muted-foreground mt-1">Pipeline des candidatures et gestion des postes</p></div>{canManage && <div className="flex gap-2"><Button variant="outline" onClick={() => setPostOpen(true)}><ClipboardList className="w-4 h-4 mr-2" /> Gérer les postes</Button><Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4 mr-2" /> Nouvelle candidature</Button></div>}</div>
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">{Object.entries(STATUT_INFO).map(([key, info]) => <button key={key} className="text-left" onClick={() => setStatusFilter(statusFilter === key ? '' : key)}><Card className={statusFilter === key ? 'ring-2 ring-primary' : ''}><CardContent className="p-4"><div className="text-2xl font-bold">{counts[key] || 0}</div><div className="text-xs text-muted-foreground">{info.label}</div></CardContent></Card></button>)}</div>
+    <Card><CardContent className="p-4 flex flex-col md:flex-row gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Rechercher un candidat, e-mail ou poste" value={search} onChange={e => setSearch(e.target.value)} /></div><select className="h-10 rounded-md border bg-background px-3 text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}><option value="">Tous les statuts</option>{Object.entries(STATUT_INFO).map(([key, info]) => <option key={key} value={key}>{info.label}</option>)}</select></CardContent></Card>
+    <Card><CardHeader><CardTitle className="text-sm">Flux de candidature : Reçu → En étude → Entretien → Accepté / Refusé</CardTitle></CardHeader><CardContent>{filtered.length === 0 ? <p className="text-center text-muted-foreground py-8">Aucune candidature correspondant aux critères</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Candidat</TableHead><TableHead>Poste</TableHead><TableHead>Statut</TableHead><TableHead>Entretien</TableHead><TableHead>Documents</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{filtered.map(c => { const info = STATUT_INFO[c.statut]; return <TableRow key={c.id}><TableCell><button className="text-left hover:underline" onClick={() => setSelected(c)}><div className="font-medium">{c.nom_candidat}</div><div className="text-xs text-muted-foreground">{c.email}</div></button></TableCell><TableCell>{c.poste}</TableCell><TableCell><span className={`inline-block px-2 py-1 rounded text-xs font-medium ${info?.color}`}>{info?.label || c.statut}</span></TableCell><TableCell>{c.date_entretien ? new Date(c.date_entretien).toLocaleString('fr-FR') : '—'}</TableCell><TableCell className="text-xs">{c.cv_url || c.lettre_url ? <span className="inline-flex items-center gap-1"><FileText className="w-3 h-3" /> disponible</span> : '—'}</TableCell><TableCell><div className="flex gap-1">{canManage && NEXT_STATUS[c.statut] && <Button variant="outline" size="sm" onClick={() => changeStatus(c, NEXT_STATUS[c.statut])}><ChevronRight className="w-4 h-4 mr-1" /> Avancer</Button>}{canManage && !['accepte', 'refuse'].includes(c.statut) && <Button variant="ghost" size="sm" onClick={() => refuse(c)}>Refuser</Button>}</div></TableCell></TableRow>; })}</TableBody></Table></div>}</CardContent></Card>
+    <NewCandidateDialog open={createOpen} posts={posts} onOpenChange={setCreateOpen} onCreated={load} />
+    <PostManagerDialog open={postOpen} posts={posts} onOpenChange={setPostOpen} onChanged={load} />
+    <CandidateDetailDialog candidate={selected} canManage={canManage} onClose={() => setSelected(null)} onChanged={load} />
+  </div></DashboardLayout>;
 }
 
-function NewCandidateDialog({ open, onOpenChange, onCreated }: {
-  open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void;
-}) {
-  const [poste, setPoste] = useState('');
-  const [nomCandidat, setNomCandidat] = useState('');
-  const [email, setEmail] = useState('');
-  const [telephone, setTelephone] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+function NewCandidateDialog({ open, posts, onOpenChange, onCreated }: { open: boolean; posts: Post[]; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
+  const [posteId, setPosteId] = useState(''); const [poste, setPoste] = useState(''); const [nom, setNom] = useState(''); const [email, setEmail] = useState(''); const [telephone, setTelephone] = useState(''); const [cv, setCv] = useState<File | null>(null); const [lettre, setLettre] = useState<File | null>(null); const [saving, setSaving] = useState(false);
+  useEffect(() => { if (open) { setPosteId(''); setPoste(''); setNom(''); setEmail(''); setTelephone(''); setCv(null); setLettre(null); } }, [open]);
+  const submit = async (e: React.FormEvent) => { e.preventDefault(); if ((!posteId && !poste.trim()) || !nom.trim() || !email.trim()) return toast.error('Poste, nom et e-mail sont obligatoires'); setSaving(true); try { const r = await api.post('/recrutement', { poste: posteId ? undefined : poste.trim(), poste_id: posteId ? Number(posteId) : undefined, nom_candidat: nom.trim(), email: email.trim(), telephone: telephone.trim() || undefined }); const id = r.data.id; for (const [type, file] of [['cv', cv], ['lettre', lettre]] as const) if (file) { const form = new FormData(); form.append('file', file); await api.post(`/recrutement/${id}/documents?type=${type}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }); } toast.success('Candidature enregistrée'); onOpenChange(false); onCreated(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Erreur lors de l’enregistrement'); } finally { setSaving(false); } };
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Nouvelle candidature</DialogTitle><DialogDescription>Enregistrez une candidature et ses documents RH.</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4"><div><Label>Poste *</Label><select className="w-full h-10 rounded-md border bg-background px-3 text-sm" value={posteId} onChange={e => { setPosteId(e.target.value); if (e.target.value) setPoste(''); }}><option value="">Choisir un poste ouvert ou saisir un intitulé</option>{posts.filter(p => p.statut === 'ouvert').map(p => <option key={p.id} value={p.id}>{p.titre}</option>)}</select>{!posteId && <Input className="mt-2" value={poste} onChange={e => setPoste(e.target.value)} placeholder="Intitulé libre" />}</div><div><Label>Nom du candidat *</Label><Input value={nom} onChange={e => setNom(e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><Label>E-mail *</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} /></div><div><Label>Téléphone</Label><Input value={telephone} onChange={e => setTelephone(e.target.value)} /></div></div><div className="grid grid-cols-2 gap-4"><div><Label>CV (PDF/DOC/DOCX)</Label><Input type="file" accept=".pdf,.doc,.docx" onChange={e => setCv(e.target.files?.[0] || null)} /></div><div><Label>Lettre (PDF/DOC/DOCX)</Label><Input type="file" accept=".pdf,.doc,.docx" onChange={e => setLettre(e.target.files?.[0] || null)} /></div></div><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button><Button type="submit" disabled={saving}>{saving ? <Spinner className="h-4 w-4" /> : 'Enregistrer'}</Button></DialogFooter></form></DialogContent></Dialog>;
+}
 
-  useEffect(() => {
-    if (open) { setPoste(''); setNomCandidat(''); setEmail(''); setTelephone(''); }
-  }, [open]);
+function PostManagerDialog({ open, posts, onOpenChange, onChanged }: { open: boolean; posts: Post[]; onOpenChange: (v: boolean) => void; onChanged: () => void }) {
+  const [titre, setTitre] = useState(''); const [description, setDescription] = useState(''); const [saving, setSaving] = useState(false); const [generating, setGenerating] = useState<number | null>(null); const [announcement, setAnnouncement] = useState('');
+  const create = async () => { if (!titre.trim()) return toast.error('Le titre est obligatoire'); setSaving(true); try { await api.post('/recrutement/postes', { titre: titre.trim(), description: description.trim() || undefined }); setTitre(''); setDescription(''); toast.success('Poste créé'); onChanged(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Erreur lors de la création'); } finally { setSaving(false); } };
+  const closePost = async (id: number) => { try { await api.post(`/recrutement/postes/${id}/fermer`); toast.success('Poste fermé'); onChanged(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Erreur'); } };
+  const generate = async (id: number) => { setGenerating(id); try { const response = await api.post(`/recrutement/postes/${id}/generer-annonce`); setAnnouncement(response.data.texte || ''); toast.success('Annonce générée : relisez-la avant de la publier'); } catch (e: any) { toast.error(e.response?.data?.detail || 'Génération indisponible'); } finally { setGenerating(null); } };
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Gestion des postes</DialogTitle><DialogDescription>Créez des postes ouverts et fermez ceux qui ne recrutent plus.</DialogDescription></DialogHeader><div className="space-y-3"><div className="flex gap-2"><Input placeholder="Titre du poste" value={titre} onChange={e => setTitre(e.target.value)} /><Input placeholder="Description (optionnelle)" value={description} onChange={e => setDescription(e.target.value)} /><Button onClick={create} disabled={saving}><Plus className="w-4 h-4" /></Button></div><div className="border rounded-md divide-y">{posts.length === 0 ? <p className="p-4 text-sm text-muted-foreground">Aucun poste</p> : posts.map(p => <div key={p.id} className="p-3 flex items-center justify-between gap-3"><div><div className="font-medium">{p.titre}</div><div className="text-xs text-muted-foreground">{p.description || 'Sans description'} · {p.statut}</div></div>{p.statut === 'ouvert' && <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => generate(p.id)} disabled={generating === p.id}>{generating === p.id ? <Spinner className="h-4 w-4" /> : <Sparkles className="mr-1 h-4 w-4" />}Générer l’annonce</Button><Button variant="outline" size="sm" onClick={() => closePost(p.id)}>Fermer</Button></div>}</div>)}</div>{announcement && <div><Label>Proposition à relire et copier-coller</Label><textarea className="mt-1 min-h-48 w-full rounded-md border bg-background p-3 text-sm" value={announcement} onChange={e => setAnnouncement(e.target.value)} /></div>}</div></DialogContent></Dialog>;
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!poste.trim() || !nomCandidat.trim() || !email.trim()) {
-      toast.error('Merci de compléter les champs requis');
-      return;
-    }
-    setIsSaving(true);
-    try {
-      await api.post('/recrutement', {
-        poste: poste.trim(),
-        nom_candidat: nomCandidat.trim(),
-        email: email.trim(),
-        telephone: telephone.trim() || undefined,
-      });
-      toast.success('Candidature enregistrée');
-      onOpenChange(false);
-      onCreated();
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'enregistrement");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Nouvelle candidature</DialogTitle>
-          <DialogDescription>Enregistrez une candidature reçue (email, dépôt en clinique, etc.).</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="poste">Poste *</Label>
-            <Input id="poste" value={poste} onChange={(e) => setPoste(e.target.value)} placeholder="ex : Esthéticienne" />
-          </div>
-          <div>
-            <Label htmlFor="nom_candidat">Nom du candidat *</Label>
-            <Input id="nom_candidat" value={nomCandidat} onChange={(e) => setNomCandidat(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="email">Email *</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="telephone">Téléphone</Label>
-              <Input id="telephone" value={telephone} onChange={(e) => setTelephone(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Enregistrer'}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
+function CandidateDetailDialog({ candidate, canManage, onClose, onChanged }: { candidate: Candidate | null; canManage: boolean; onClose: () => void; onChanged: () => void }) {
+  const [notes, setNotes] = useState(''); const [date, setDate] = useState(''); const [cvText, setCvText] = useState(''); const [history, setHistory] = useState<HistoryRow[]>([]); const [analysing, setAnalysing] = useState(false);
+  useEffect(() => { if (!candidate) return; setNotes(candidate.notes_rh || ''); setDate(candidate.date_entretien ? candidate.date_entretien.slice(0, 16) : ''); setCvText(''); api.get(`/recrutement/${candidate.id}/historique`).then(r => setHistory(r.data || [])).catch(() => setHistory([])); }, [candidate]);
+  if (!candidate) return null;
+  const save = async () => { try { await api.patch(`/recrutement/${candidate.id}`, { notes_rh: notes, date_entretien: date ? new Date(date).toISOString() : null }); toast.success('Dossier RH mis à jour'); onChanged(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Erreur'); } };
+  const analyse = async () => { setAnalysing(true); try { const r = await api.post(`/recrutement/${candidate.id}/analyser-cv`, { texte_cv: cvText || undefined }); toast.success(r.data.analyse_ia_statut === 'terminee' ? 'Analyse terminée' : 'Analyse IA indisponible, traitement manuel conservé'); onChanged(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Erreur d’analyse'); } finally { setAnalysing(false); } };
+  return <Dialog open={!!candidate} onOpenChange={v => !v && onClose()}><DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"><DialogHeader><div className="flex justify-between"><div><DialogTitle>{candidate.nom_candidat}</DialogTitle><DialogDescription>{candidate.email} · {candidate.telephone || 'Téléphone non renseigné'} · {candidate.poste}</DialogDescription></div><Button variant="ghost" size="sm" onClick={onClose}><X className="w-4 h-4" /></Button></div></DialogHeader><div className="grid md:grid-cols-2 gap-5"><div className="space-y-4"><div><Label>Notes RH</Label><textarea className="w-full min-h-28 rounded-md border bg-background p-3 text-sm" value={notes} onChange={e => setNotes(e.target.value)} disabled={!canManage} /></div><div><Label>Date d’entretien</Label><Input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} disabled={!canManage} /></div>{canManage && <Button onClick={save}>Enregistrer le dossier</Button>}<div><Label>Documents</Label><div className="text-sm space-y-1">{candidate.cv_url ? <a className="block underline" href={candidate.cv_url} target="_blank" rel="noreferrer">Voir le CV</a> : <span className="text-muted-foreground">CV absent</span>}{candidate.lettre_url ? <a className="block underline" href={candidate.lettre_url} target="_blank" rel="noreferrer">Voir la lettre</a> : <span className="text-muted-foreground">Lettre absente</span>}</div></div></div><div className="space-y-4"><div className="rounded-md border p-3"><div className="flex items-center gap-2 font-medium"><Sparkles className="w-4 h-4" /> Analyse CV assistée</div><p className="text-xs text-muted-foreground mt-1">L’IA aide à lire le CV, mais ne prend jamais la décision d’embauche.</p><textarea className="w-full min-h-24 rounded-md border bg-background p-3 text-sm mt-3" placeholder="Collez le texte du CV pour l’analyser" value={cvText} onChange={e => setCvText(e.target.value)} disabled={!canManage} />{canManage && <Button className="mt-2" variant="outline" onClick={analyse} disabled={analysing}>{analysing ? <Spinner className="h-4 w-4" /> : 'Analyser le CV'}</Button>}{candidate.analyse_ia_statut === 'terminee' && <div className="mt-3 text-sm"><div className="font-medium">Score : {candidate.analyse_ia_score ?? '—'}/100</div><p className="whitespace-pre-wrap mt-1">{candidate.analyse_ia_resume}</p></div>}{candidate.analyse_ia_statut === 'indisponible' && <p className="mt-2 text-xs text-muted-foreground">Analyse indisponible : poursuivre l’évaluation manuellement.</p>}</div><div><div className="font-medium mb-2">Historique du parcours</div><div className="border rounded-md divide-y">{history.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Aucun historique</p> : history.map(h => <div key={h.id} className="p-2 text-xs"><div><b>{h.ancien_statut || 'création'}</b> → <b>{h.nouveau_statut}</b></div><div className="text-muted-foreground">{new Date(h.changed_at).toLocaleString('fr-FR')}{h.notes_rh ? ` · ${h.notes_rh}` : ''}</div></div>)}</div></div></div></div></DialogContent></Dialog>;
 }

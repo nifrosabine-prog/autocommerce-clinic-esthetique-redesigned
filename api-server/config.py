@@ -18,11 +18,11 @@ class Settings(BaseSettings):
     # No implicit tenant or deployment mode in a release.
     clinic_id: int | None = None
     # Mode d’exploitation explicite : aucun fallback implicite en production.
-    deployment_mode: Literal["internal_single_clinic", "enterprise"] = "enterprise"
+    deployment_mode: Literal["internal_single_clinic", "enterprise"] = "internal_single_clinic"
     # Les routes publiques/webhooks doivent être opt-in, jamais implicites.
     public_routes_enabled: bool = False
     webhooks_enabled: bool = False
-    teleconsultation_enabled: bool = False
+    teleconsultation_enabled: bool = True
     # Tenant explicite utilisé uniquement par les routes publiques de la landing.
     public_clinic_id: int | None = None
     env: str = ""
@@ -77,6 +77,10 @@ class Settings(BaseSettings):
 
     # ── Resend (Email) ───────────────────────────────────────
     resend_api_key: str = ""
+    # Resend Inbound : adresse dédiée et tenant explicite du recrutement.
+    recruitment_inbound_email: str = ""
+    recruitment_inbound_clinic_id: int | None = None
+    resend_webhook_signing_secret: str = ""
 
     # ── Twilio (SMS) ─────────────────────────────────────────
     twilio_account_sid: str = ""
@@ -102,7 +106,7 @@ class Settings(BaseSettings):
 
     # ── Politique des sorties externes ─────────────────────────
     # En mode interne, seules les valeurs ai,whatsapp sont autorisées.
-    external_integrations_allowlist: str = "ai,whatsapp"
+    external_integrations_allowlist: str = ""
 
     # ── LLM multi-provider (v1.1.0 patch IA) ───────────────────
     # Sélection du provider LLM principal pour les assistants et le runtime
@@ -160,10 +164,12 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = "noreply@clinic.local"
+    smtp_from: str = "noreply@example.invalid"
 
     # ── Monitoring ───────────────────────────────────────────
     sentry_dsn: str = ""
+    log_level: str = "INFO"
+    log_json: bool = True
 
     # ── RGPD ─────────────────────────────────────────────────
     rgpd_retention_years: int = 10
@@ -185,6 +191,26 @@ _PLACEHOLDER_MARKERS = ("changeme", "change-me", "change_me", "password", "place
 def _contains_placeholder(value: str) -> bool:
     normalized = (value or "").strip().lower()
     return any(marker in normalized for marker in _PLACEHOLDER_MARKERS)
+
+
+def _is_valid_fernet_key(value: str) -> bool:
+    """Vérifie le format exact attendu par cryptography.fernet.Fernet :
+    32 octets encodés en base64 url-safe (44 caractères, padding « = » inclus).
+
+    Correctif AUD-001 (2026-09-11) : une clé présente mais mal formée
+    (placeholder non remplacé, guillemets copiés, troncature) ne doit plus
+    être découverte au premier POST de dossier médical avec
+    « Fernet key must be 32 url-safe base64-encoded bytes » — elle est
+    refusée dès la validation de la configuration en production.
+    """
+    try:
+        # Import local : évite tout cycle d'import au chargement du module.
+        from cryptography.fernet import Fernet
+
+        Fernet(value.encode())
+        return True
+    except Exception:
+        return False
 
 
 def _validate_production_secrets(settings: "Settings") -> None:
@@ -213,24 +239,44 @@ def _validate_production_secrets(settings: "Settings") -> None:
         erreurs.append("SOCIAL_WEBHOOK_CLINIC_ID doit être défini lorsque les webhooks sont activés")
     if settings.public_routes_enabled and (not settings.public_clinic_id or settings.public_clinic_id <= 0):
         erreurs.append("PUBLIC_CLINIC_ID doit être défini lorsque les routes publiques sont activées")
-    if settings.is_internal_single_clinic and settings.public_routes_enabled:
-        erreurs.append("PUBLIC_ROUTES_ENABLED doit être false en mode internal_single_clinic")
-    if settings.is_internal_single_clinic and settings.webhooks_enabled:
-        erreurs.append("WEBHOOKS_ENABLED doit être false en mode internal_single_clinic")
+    if settings.is_internal_single_clinic and settings.public_routes_enabled and settings.public_clinic_id != settings.clinic_id:
+        erreurs.append("PUBLIC_CLINIC_ID doit être identique à CLINIC_ID en mode internal_single_clinic")
+    if settings.is_internal_single_clinic and settings.webhooks_enabled and settings.social_webhook_clinic_id != settings.clinic_id:
+        erreurs.append("SOCIAL_WEBHOOK_CLINIC_ID doit être identique à CLINIC_ID en mode internal_single_clinic")
+    if settings.is_internal_single_clinic and settings.public_clinic_id is not None and settings.public_clinic_id != settings.clinic_id:
+        erreurs.append("PUBLIC_CLINIC_ID ne peut cibler une autre clinique en mode internal_single_clinic")
+    if settings.is_internal_single_clinic and settings.social_webhook_clinic_id is not None and settings.social_webhook_clinic_id != settings.clinic_id:
+        erreurs.append("SOCIAL_WEBHOOK_CLINIC_ID ne peut cibler une autre clinique en mode internal_single_clinic")
     if settings.is_internal_single_clinic and not settings.allowed_external_integrations.issubset({"ai", "whatsapp"}):
-        erreurs.append("Le mode interne autorise uniquement les intégrations externes ai et whatsapp")
+        erreurs.append("Le mode internal_single_clinic autorise uniquement les intégrations externes ai et whatsapp")
     if not settings.cors_origins:
         erreurs.append("CORS_ORIGINS doit être définie en production")
     if settings.secret_key == DEFAULT_SECRET_KEY or len(settings.secret_key) < 64:
         erreurs.append("SECRET_KEY doit être définie et faire au moins 64 caractères en production")
     if not settings.fernet_key:
         erreurs.append("FERNET_KEY doit être définie en production (chiffrement des données médicales)")
+    # Correctif AUD-001 : le format est vérifié par la bibliothèque elle-même,
+    # pas seulement la présence — une clé invalide casse le dossier médical.
+    if settings.fernet_key and not _is_valid_fernet_key(settings.fernet_key):
+        erreurs.append(
+            "FERNET_KEY doit être une clé Fernet valide : 32 octets encodés en "
+            "base64 url-safe (44 caractères, padding '=' inclus), sans guillemets. "
+            "Générer avec : python -c \"from cryptography.fernet import Fernet; "
+            "print(Fernet.generate_key().decode())\""
+        )
     if not settings.photo_encryption_key:
         erreurs.append("PHOTO_ENCRYPTION_KEY doit être définie en production (chiffrement des photos)")
     if settings.photo_encryption_key and settings.photo_encryption_key == settings.fernet_key:
         erreurs.append("PHOTO_ENCRYPTION_KEY doit être différente de FERNET_KEY")
     if not settings.mfa_encryption_key:
         erreurs.append("MFA_ENCRYPTION_KEY doit être définie en production (chiffrement des secrets TOTP)")
+    # Correctif AUD-001 : services/mfa.py chiffre le secret TOTP avec cette
+    # clé via Fernet — un format invalide casse l'activation MFA.
+    if settings.mfa_encryption_key and not _is_valid_fernet_key(settings.mfa_encryption_key):
+        erreurs.append(
+            "MFA_ENCRYPTION_KEY doit être une clé Fernet valide : 32 octets "
+            "encodés en base64 url-safe (44 caractères, padding '=' inclus)."
+        )
     if settings.mfa_encryption_key and settings.mfa_encryption_key in {settings.fernet_key, settings.photo_encryption_key}:
         erreurs.append("MFA_ENCRYPTION_KEY doit être distincte des clés FERNET_KEY et PHOTO_ENCRYPTION_KEY")
     if not settings.refresh_cookie_secure:
@@ -284,9 +330,10 @@ def _validate_production_secrets(settings: "Settings") -> None:
         settings.aws_secret_access_key,
         settings.smtp_host,
         settings.smtp_password,
-        settings.sentry_dsn,
     )):
         erreurs.append("Les credentials Email/SMS/S3/Sentry sont interdits en mode internal_single_clinic")
+    if settings.refresh_cookie_domain and any(marker in settings.refresh_cookie_domain.lower() for marker in ("localhost", ".local", "example")):
+        erreurs.append("REFRESH_COOKIE_DOMAIN doit référencer le vrai domaine final ou rester vide")
 
     if erreurs:
         raise RuntimeError(
@@ -356,4 +403,5 @@ WA_TEMPLATES = {
     "candidature_recu": "Nouvelle candidature reçue : {poste} — {nom}",
     "candidature_statut": "Votre candidature pour {poste} : statut mis à jour → {statut}",
     "injection_rappel": "Bonjour {prenom}, votre injection de {produit} arrive à échéance le {date}. Souhaitez-vous planifier votre prochaine séance ?",
+    "rdv_praticien_change": "Votre rendez-vous du {date} à {heure} est maintenu, mais sera désormais assuré par {praticien} (absence imprévue de votre praticien initial). Merci de nous contacter pour toute question.",
 }

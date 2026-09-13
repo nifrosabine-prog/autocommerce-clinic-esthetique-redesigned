@@ -310,6 +310,10 @@ def build_default_registry(
     schedule_task=None,
     add_loyalty_points=None,
     get_alerts_stock=None,
+    analyze_sentiment=None,
+    propose_dispatch=None,
+    create_social_post_draft=None,
+    list_social_posts=None,
 ) -> ToolRegistry:
     reg = ToolRegistry()
     tools_specs: List[ToolDef] = []
@@ -421,6 +425,54 @@ def build_default_registry(
             "Alertes sur les ruptures de stock.",
             {"type": "object", "properties": {}, "required": []},
             get_alerts_stock,
+        ))
+    if callable(analyze_sentiment):
+        _add(ToolDef(
+            "analyze_sentiment",
+            "Analyse le ton (positif/neutre/négatif) des derniers messages "
+            "omnicanal et avis clients — lecture seule, méthode déterministe "
+            "par mots-clés, aucun score inventé.",
+            {"type": "object",
+             "properties": {"plateforme": {"type": "string"}},
+             "required": []},
+            analyze_sentiment,
+        ))
+    if callable(propose_dispatch):
+        _add(ToolDef(
+            "propose_dispatch",
+            "Croise créneaux sous-utilisés et absentéisme pour proposer des "
+            "pistes de réorganisation. Lecture seule, ne modifie rien.",
+            {"type": "object",
+             "properties": {"period_days": {"type": "integer"}},
+             "required": []},
+            propose_dispatch,
+        ))
+    if callable(create_social_post_draft):
+        _add(ToolDef(
+            "create_social_post_draft",
+            "Crée UNIQUEMENT un brouillon de publication réseau social "
+            "(instagram/facebook/tiktok). Ne publie jamais : la publication "
+            "reste une action humaine distincte.",
+            {"type": "object",
+             "properties": {
+                 "plateforme": {"type": "string"},
+                 "contenu": {"type": "string"},
+                 "media_url": {"type": "string"},
+                 "date_publication_prevue": {"type": "string"},
+             },
+             "required": ["plateforme", "contenu"]},
+            create_social_post_draft,
+        ))
+    if callable(list_social_posts):
+        _add(ToolDef(
+            "list_social_posts",
+            "Liste les publications (brouillon/planifié/publié/échec) — "
+            "lecture seule.",
+            {"type": "object",
+             "properties": {"plateforme": {"type": "string"},
+                             "statut": {"type": "string"}},
+             "required": []},
+            list_social_posts,
         ))
 
     for t in tools_specs:

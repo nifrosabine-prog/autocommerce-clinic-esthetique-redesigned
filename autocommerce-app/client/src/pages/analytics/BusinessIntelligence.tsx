@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/hooks/useCurrency';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
 import {
@@ -41,6 +42,7 @@ interface TopTreatment {
 
 export default function BusinessIntelligence() {
   const { user } = useAuth();
+  const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'practitioners' | 'treatments' | 'patients' | 'forecast'>('overview');
@@ -128,7 +130,7 @@ export default function BusinessIntelligence() {
                 <CardTitle className="text-sm font-medium text-gray-600">Revenus Aujourd'hui</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{kpis.revenue_today.toFixed(2)} DT</div>
+                <div className="text-3xl font-bold">{kpis.revenue_today.toFixed(2)} {currency.currency_symbol}</div>
                 <p className="text-xs text-gray-500 mt-2">Factures payées</p>
               </CardContent>
             </Card>
@@ -138,7 +140,7 @@ export default function BusinessIntelligence() {
                 <CardTitle className="text-sm font-medium text-gray-600">Revenus du Mois</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{kpis.revenue_month.toFixed(2)} DT</div>
+                <div className="text-3xl font-bold">{kpis.revenue_month.toFixed(2)} {currency.currency_symbol}</div>
                 <p className="text-xs text-gray-500 mt-2">Cumul mensuel</p>
               </CardContent>
             </Card>
@@ -169,7 +171,7 @@ export default function BusinessIntelligence() {
         <div className="flex gap-2 border-b overflow-x-auto">
           {[
             { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3 },
-            { id: 'practitioners', label: 'Praticiens', icon: Users },
+            { id: 'practitioners', label: 'Médecins', icon: Users },
             { id: 'treatments', label: 'Soins', icon: Zap },
             { id: 'patients', label: 'Patients', icon: Users },
             { id: 'forecast', label: 'Prévisions', icon: TrendingUp },
@@ -203,7 +205,7 @@ export default function BusinessIntelligence() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <p className="text-sm text-gray-600">Revenu Total</p>
-                    <p className="text-3xl font-bold text-green-600">{revenueSummary.total_revenue.toFixed(2)} DT</p>
+                    <p className="text-3xl font-bold text-green-600">{revenueSummary.total_revenue.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Nombre de Factures</p>
@@ -211,7 +213,7 @@ export default function BusinessIntelligence() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Facture Moyenne</p>
-                    <p className="text-3xl font-bold">{revenueSummary.avg_invoice.toFixed(2)} DT</p>
+                    <p className="text-3xl font-bold">{revenueSummary.avg_invoice.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                 </div>
               </CardContent>
@@ -232,7 +234,7 @@ export default function BusinessIntelligence() {
                           <p className="font-medium">{acte}</p>
                           <p className="text-sm text-gray-600">{data.count} fois</p>
                         </div>
-                        <p className="font-bold">{data.revenue.toFixed(2)} DT</p>
+                        <p className="font-bold">{data.revenue.toFixed(2)} {currency.currency_symbol}</p>
                       </div>
                     ))}
                 </div>
@@ -241,7 +243,7 @@ export default function BusinessIntelligence() {
           </div>
         )}
 
-        {/* Praticiens */}
+        {/* Médecins */}
         {activeTab === 'practitioners' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {topPractitioners.map((practitioner, idx) => (
@@ -253,7 +255,7 @@ export default function BusinessIntelligence() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Revenu</span>
-                      <span className="font-bold">{practitioner.revenue.toFixed(2)} DT</span>
+                      <span className="font-bold">{practitioner.revenue.toFixed(2)} {currency.currency_symbol}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Patients uniques</span>
@@ -286,7 +288,7 @@ export default function BusinessIntelligence() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-gray-600">Revenu Total</span>
-                      <span className="font-bold">{treatment.revenue.toFixed(2)} DT</span>
+                      <span className="font-bold">{treatment.revenue.toFixed(2)} {currency.currency_symbol}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Nombre de fois</span>
@@ -322,7 +324,7 @@ export default function BusinessIntelligence() {
                       <p className="text-sm text-gray-600">{patient.visits} visites</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">{patient.total_ca.toFixed(2)} DT</p>
+                      <p className="font-bold">{patient.total_ca.toFixed(2)} {currency.currency_symbol}</p>
                       <span className={`text-xs px-2 py-1 rounded ${
                         patient.loyalty_level === 'vip' ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700'
                       }`}>
@@ -350,11 +352,11 @@ export default function BusinessIntelligence() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Total prévu</p>
-                    <p className="text-3xl font-bold text-blue-600">{forecast.total_forecast.toFixed(2)} DT</p>
+                    <p className="text-3xl font-bold text-blue-600">{forecast.total_forecast.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Moyenne quotidienne</p>
-                    <p className="text-3xl font-bold">{forecast.avg_daily_revenue.toFixed(2)} DT</p>
+                    <p className="text-3xl font-bold">{forecast.avg_daily_revenue.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                 </div>
                 <div>
@@ -374,7 +376,7 @@ export default function BusinessIntelligence() {
                                 }}
                               />
                             </div>
-                            <span className="font-medium">{revenue.toFixed(2)} DT</span>
+                            <span className="font-medium">{revenue.toFixed(2)} {currency.currency_symbol}</span>
                           </div>
                         </div>
                       ))}

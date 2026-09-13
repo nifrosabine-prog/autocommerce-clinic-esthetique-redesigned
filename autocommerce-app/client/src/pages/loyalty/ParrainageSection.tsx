@@ -22,6 +22,7 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
   const [filleuls, setFilleuls] = useState<any[]>([]);
   const [newFilleulId, setNewFilleulId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     if (patientId) {
@@ -32,14 +33,21 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
   const loadParrainageData = async () => {
     try {
       setIsLoading(true);
+      setLoadError('');
       const [codeRes, filleulsRes] = await Promise.all([
         api.get(`/parrainage/code/${patientId}`),
         api.get(`/parrainage/filleuls/${patientId}`)
       ]);
       setCode(codeRes.data.code);
       setFilleuls(filleulsRes.data);
-    } catch (err) {
-      toast.error('Erreur lors du chargement des données de parrainage');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      const message = detail || (status === 404
+        ? 'Patient introuvable ou anonymisé dans cette clinique.'
+        : 'Impossible de charger les données de parrainage.');
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -52,13 +60,21 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
 
   const handleUseCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFilleulId) return;
+    const filleulId = Number(newFilleulId.trim());
+    if (!Number.isInteger(filleulId) || filleulId <= 0) {
+      toast.error('Saisissez un identifiant patient numérique valide.');
+      return;
+    }
+    if (filleulId === patientId) {
+      toast.error('Un patient ne peut pas être son propre filleul.');
+      return;
+    }
     
     setIsSubmitting(true);
     try {
       await api.post('/parrainage/utiliser', {
         code: code,
-        filleul_id: Number(newFilleulId)
+        filleul_id: filleulId
       });
       toast.success('Parrainage validé !');
       setNewFilleulId('');
@@ -71,6 +87,18 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
   };
 
   if (isLoading) return <div className="flex justify-center p-4"><Spinner /></div>;
+  if (loadError) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 p-6">
+          <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          <Button type="button" variant="outline" onClick={loadParrainageData}>
+            Réessayer
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

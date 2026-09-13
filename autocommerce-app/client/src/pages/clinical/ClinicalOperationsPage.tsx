@@ -7,6 +7,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { clinicalOpsApi, patientsSearchApi, type CureTraitement, type EvenementIndesirable, type PatientSearchResult, type ProtocoleSoin, type SuiviPostActe } from '@/lib/api';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface ClinicalAuditEntry {
+  id: number;
+  created_at: string;
+  utilisateur: string;
+  role: string;
+  patient_id: number;
+  patient: string;
+  action: string;
+  resource_type: string;
+  resource_id: number;
+}
 
 interface ClinicalDashboard {
   suivis: { aujourd_hui: number; cette_semaine: number; items: Array<{ id: number; patient_id: number; type_suivi: string; echeance_at: string; statut: string; notes?: string | null }> };
@@ -18,7 +31,10 @@ const formatDate = (value?: string | null) => value ? new Date(value).toLocaleDa
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
 export default function ClinicalOperationsPage() {
+  const { user } = useAuth();
+  const canViewAudit = ['directrice', 'admin'].includes(user?.role || '');
   const [dashboard, setDashboard] = useState<ClinicalDashboard | null>(null);
+  const [auditEntries, setAuditEntries] = useState<ClinicalAuditEntry[]>([]);
   const [cures, setCures] = useState<CureTraitement[]>([]);
   const [followups, setFollowups] = useState<SuiviPostActe[]>([]);
   const [events, setEvents] = useState<EvenementIndesirable[]>([]);
@@ -36,18 +52,20 @@ export default function ClinicalOperationsPage() {
   const load = async () => {
     try {
       setLoading(true);
-      const [dashboardRes, curesRes, followupsRes, eventsRes, protocolsRes] = await Promise.all([
+      const [dashboardRes, curesRes, followupsRes, eventsRes, protocolsRes, auditRes] = await Promise.all([
         clinicalOpsApi.dashboard(),
         clinicalOpsApi.listCures(),
         clinicalOpsApi.listFollowups({ horizon_days: 30 }),
         clinicalOpsApi.listAdverseEvents({ statut: 'ouvert' }),
         clinicalOpsApi.listProtocols(),
+        canViewAudit ? clinicalOpsApi.listGlobalAudit({ limit: 100 }) : Promise.resolve({ data: [] as ClinicalAuditEntry[] }),
       ]);
       setDashboard(dashboardRes.data);
       setCures(curesRes.data);
       setFollowups(followupsRes.data);
       setEvents(eventsRes.data);
       setProtocols(protocolsRes.data);
+      setAuditEntries(auditRes.data);
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Impossible de charger le cockpit clinique');
     } finally {
@@ -55,7 +73,7 @@ export default function ClinicalOperationsPage() {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [canViewAudit]);
 
   useEffect(() => {
     const query = patientSearch.trim();
@@ -138,6 +156,22 @@ export default function ClinicalOperationsPage() {
     }
   };
 
+  const confirmFollowupAppointment = async (followup: SuiviPostActe) => {
+    const defaultSlot = followup.echeance_at.slice(0, 16);
+    const slot = window.prompt('Créneau confirmé avec la patiente (AAAA-MM-JJTHH:MM)', defaultSlot);
+    if (!slot) return;
+    try {
+      await clinicalOpsApi.confirmFollowupAppointment(followup.id, {
+        date_heure: new Date(slot).toISOString(),
+        patient_confirme: true,
+      });
+      toast.success('Disponibilité confirmée : rendez-vous créé dans l’agenda');
+      await load();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || 'Création du rendez-vous impossible');
+    }
+  };
+
   const createEvent = async () => {
     if (!Number(eventForm.patient_id) || eventForm.description.trim().length < 5) {
       toast.error('Patient et description détaillée sont obligatoires');
@@ -207,7 +241,12 @@ export default function ClinicalOperationsPage() {
               {followups.filter((item) => item.statut !== 'termine').slice(0, 8).map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border p-3">
                   <div><p className="font-medium">Patient #{item.patient_id} · {item.type_suivi.replaceAll('_', ' ')}</p><p className="text-sm text-muted-foreground">Échéance : {formatDateTime(item.echeance_at)}</p></div>
-                  <Button size="sm" variant="outline" onClick={() => void completeFollowup(item.id)}><CheckCircle2 className="mr-1 h-4 w-4" />Clôturer</Button>
+                  <div className="flex gap-2">
+                    {!item.rdv_id && item.episode_id && item.intervention_id && item.statut !== 'termine' && (
+                      <Button size="sm" variant="outline" onClick={() => void confirmFollowupAppointment(item)}><CalendarCheck className="mr-1 h-4 w-4" />Confirmer avec la patiente</Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => void completeFollowup(item.id)}><CheckCircle2 className="mr-1 h-4 w-4" />Clôturer</Button>
+                  </div>
                 </div>
               ))}
               {!loading && followups.filter((item) => item.statut !== 'termine').length === 0 && <p className="py-8 text-center text-muted-foreground">Aucun suivi en attente dans les 30 prochains jours.</p>}
@@ -222,6 +261,30 @@ export default function ClinicalOperationsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {canViewAudit && (
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-primary" />Journal clinique global</CardTitle></CardHeader>
+            <CardContent>
+              {auditEntries.length === 0 ? (
+                <p className="py-6 text-center text-muted-foreground">Aucune activité clinique enregistrée.</p>
+              ) : (
+                <div className="max-h-80 overflow-auto rounded-lg border">
+                  <div className="min-w-[760px] divide-y">
+                    {auditEntries.map((entry) => (
+                      <div key={entry.id} className="grid grid-cols-[150px_1fr_130px_1fr] gap-3 px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">{formatDateTime(entry.created_at)}</span>
+                        <span><strong>{entry.action.replaceAll('_', ' ')}</strong><br /><span className="text-xs text-muted-foreground">{entry.resource_type} #{entry.resource_id}</span></span>
+                        <span className="capitalize">{entry.role}</span>
+                        <span>{entry.utilisateur} · {entry.patient}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
           <Card>

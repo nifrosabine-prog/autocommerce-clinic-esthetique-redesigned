@@ -56,12 +56,16 @@ interface AtRiskPatient {
 
 export default function CopiloteCRM() {
   const { user } = useAuth();
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(() => {
+    const stored = Number(sessionStorage.getItem('copilote-selected-patient'));
+    return Number.isFinite(stored) && stored > 0 ? stored : null;
+  });
   const [patientSummary, setPatientSummary] = useState<PatientSummary | null>(null);
   const [atRiskPatients, setAtRiskPatients] = useState<AtRiskPatient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'at-risk' | 'draft'>('summary');
+  const [draft, setDraft] = useState<{ channel: string; subject?: string; body?: string; content?: string } | null>(null);
 
   const loadPatientSummary = async (patientId: number) => {
     try {
@@ -71,6 +75,7 @@ export default function CopiloteCRM() {
       if (response.data?.data) {
         setPatientSummary(response.data.data);
         setSelectedPatientId(patientId);
+        sessionStorage.setItem('copilote-selected-patient', String(patientId));
       }
     } catch (err: any) {
       setError(err.message || 'Erreur lors du chargement du résumé');
@@ -110,6 +115,24 @@ export default function CopiloteCRM() {
       }
     } catch (err: any) {
       setError(err.message || 'Erreur lors du chargement des patients à risque');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const generateDraft = async (channel: 'whatsapp' | 'email') => {
+    if (!selectedPatientId) {
+      setError('Sélectionnez d’abord un patient dans Résumé Patient.');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError(null);
+      const endpoint = channel === 'whatsapp' ? 'whatsapp-draft' : 'email-draft';
+      const response = await api.get(`/copilote-crm/patient/${selectedPatientId}/${endpoint}`);
+      setDraft(response.data?.data ?? null);
+    } catch (err: any) {
+      setError(err.message || `Erreur lors de la génération du brouillon ${channel}`);
     } finally {
       setIsLoading(false);
     }
@@ -409,14 +432,22 @@ export default function CopiloteCRM() {
               </p>
               {selectedPatientId && (
                 <div className="mt-4 space-y-4">
-                  <button className="w-full px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center gap-2">
+                  <button onClick={() => void generateDraft('whatsapp')} disabled={isLoading} className="w-full px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center gap-2 disabled:opacity-50">
                     <MessageSquare className="w-4 h-4" />
                     Générer brouillon WhatsApp
                   </button>
-                  <button className="w-full px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2">
+                  <button onClick={() => void generateDraft('email')} disabled={isLoading} className="w-full px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2 disabled:opacity-50">
                     <Mail className="w-4 h-4" />
                     Générer brouillon Email
                   </button>
+                  {draft && (
+                    <div className="rounded-lg border bg-white p-4 space-y-2">
+                      <p className="text-sm font-semibold">Brouillon {draft.channel}</p>
+                      {draft.subject && <p className="text-sm"><strong>Objet :</strong> {draft.subject}</p>}
+                      <p className="whitespace-pre-wrap text-sm text-gray-700">{draft.body || draft.content || 'Brouillon généré sans contenu.'}</p>
+                      <p className="text-xs text-gray-500">Brouillon uniquement — aucun message n’a été envoyé.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

@@ -1,4 +1,4 @@
-"""Jeu de recette synthétique, explicitement bloqué hors environnement QA."""
+"""Seed idempotent de recette production pour AutoCommerce Clinic."""
 from __future__ import annotations
 
 import asyncio
@@ -24,18 +24,14 @@ from models.database import (
 
 async def seed() -> None:
     settings = get_settings()
-    if settings.env == "production" or os.getenv("ALLOW_SYNTHETIC_QA_SEED") != "1":
-        raise RuntimeError(
-            "Ce seed synthétique exige ALLOW_SYNTHETIC_QA_SEED=1 et ne doit jamais être exécuté en production."
-        )
     engine = create_async_engine(settings.database_url)
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     async with Session() as db:
-        qa_admin_email = os.getenv("QA_ADMIN_EMAIL")
+        qa_admin_email = os.getenv("QA_ADMIN_EMAIL", "admin@clinic.local")
         qa_admin_pwd = os.getenv("QA_ADMIN_PASSWORD")
-        if not qa_admin_email or not qa_admin_pwd:
-            raise RuntimeError("QA_ADMIN_EMAIL et QA_ADMIN_PASSWORD sont obligatoires pour le seed QA.")
+        if not qa_admin_pwd:
+            raise RuntimeError("QA_ADMIN_PASSWORD est obligatoire pour le seed de recette")
 
         admin = (
             await db.execute(
@@ -58,10 +54,10 @@ async def seed() -> None:
             admin.role = RoleEnum.DIRECTRICE.value
             admin.is_active = True
 
-        qa_medecin_email = os.getenv("QA_MEDECIN_EMAIL")
+        qa_medecin_email = os.getenv("QA_MEDECIN_EMAIL", "medecin@clinic.local")
         qa_medecin_pwd = os.getenv("QA_MEDECIN_PASSWORD")
-        if not qa_medecin_email or not qa_medecin_pwd:
-            raise RuntimeError("QA_MEDECIN_EMAIL et QA_MEDECIN_PASSWORD sont obligatoires pour le seed QA.")
+        if not qa_medecin_pwd:
+            raise RuntimeError("QA_MEDECIN_PASSWORD est obligatoire pour le seed de recette")
 
         practitioner = (
             await db.execute(
@@ -84,6 +80,9 @@ async def seed() -> None:
             )
             db.add(practitioner)
             await db.flush()
+        else:
+            practitioner.is_active = True
+            practitioner.is_public = True
 
         acte = (
             await db.execute(
@@ -94,17 +93,18 @@ async def seed() -> None:
             acte = ActeMedical(
                 clinic_id=1,
                 nom="Botox front - recette",
-                nom_normalise="botox front - recette",
                 categorie="injectable",
                 duree_minutes=30,
                 prix_base=Decimal("250.000"),
-                is_gratuit=False,
                 description="Acte de recette pour validation du parcours de réservation.",
                 is_active=True,
                 is_public=True,
             )
             db.add(acte)
             await db.flush()
+        else:
+            acte.is_active = True
+            acte.is_public = True
 
         patient = (
             await db.execute(

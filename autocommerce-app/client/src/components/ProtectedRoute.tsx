@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { Spinner } from '@/components/ui/spinner';
@@ -15,6 +15,13 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { isAuthenticated, isLoading, user } = useAuth();
   const [, setLocation] = useLocation();
 
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) setLocation('/login');
+    if (!isLoading && isAuthenticated && requiredRoles && user && !requiredRoles.includes(user.role)) {
+      setLocation('/dashboard');
+    }
+  }, [isLoading, isAuthenticated, requiredRoles, user, setLocation]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -24,19 +31,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   if (!isAuthenticated) {
-    setLocation('/login');
     return null;
   }
 
   if (requiredRoles && user && !requiredRoles.includes(user.role)) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Accès refusé</h1>
-          <p className="text-muted-foreground">Vous n'avez pas les permissions pour accéder à cette page.</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return <>{children}</>;

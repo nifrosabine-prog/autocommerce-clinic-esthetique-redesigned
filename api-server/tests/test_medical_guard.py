@@ -25,3 +25,10 @@ def test_escalation_is_multilingual():
     assert "medizin" in escalation_message("de").lower()
     assert "médicale" in escalation_message("fr").lower()
     assert "طبي" in escalation_message("darija")
+
+def test_assistant_medical_message_states_not_a_doctor_and_offers_transfer():
+    from services.assistant_tools_schema import INFORMATION_MEDICALE_MESSAGE
+
+    assert "Je ne suis pas médecin" in INFORMATION_MEDICALE_MESSAGE
+    assert "contacter un médecin" in INFORMATION_MEDICALE_MESSAGE
+    assert "transférer" in INFORMATION_MEDICALE_MESSAGE

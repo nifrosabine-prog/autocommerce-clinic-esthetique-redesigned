@@ -6,7 +6,27 @@ import pytest
 
 import services.factures as factures_module
 from services.factures import create_facture, marquer_payee, annuler_facture, list_factures
+from services.clinic_settings import set_setting
 from models.database import StatutFacture, Utilisateur, RoleEnum, Facture, DossierMedical
+
+
+@pytest.mark.asyncio
+async def test_new_invoice_snapshots_current_currency_then_keeps_it(db, patient):
+    await set_setting(
+        "clinic.currency",
+        {"currency_code": "EUR", "currency_symbol": "€"},
+        db,
+        clinic_id=1,
+    )
+    facture = await create_facture(
+        {"patient_id": patient.id, "actes": [{"description": "Consultation", "prix": "180.000", "quantite": 1}]},
+        created_by=1,
+        db=db,
+        clinic_id=1,
+    )
+    assert facture.currency_code == "EUR"
+    assert facture.currency_symbol == "€"
+    assert facture.total_ttc == Decimal("214.200")
 
 
 @pytest.mark.asyncio

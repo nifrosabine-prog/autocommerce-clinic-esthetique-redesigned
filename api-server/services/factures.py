@@ -17,6 +17,7 @@ from models.database import DossierMedical, Facture, Patient, StatutFacture
 from config import get_settings
 from services.commissions import create_commission
 from services.fidelite import add_points
+from services.clinic_settings import get_setting
 
 # 1 point de fidélité par tranche de 10 (unité monétaire) dépensée
 POINTS_PAR_UNITE = Decimal("10")
@@ -47,7 +48,18 @@ def _json_lines(lines: list[dict] | None) -> list[dict]:
 
 def _compute_totals(actes: list[dict], produits: list[dict], remise_globale_pct: Decimal,
                      taux_tva: Decimal) -> dict:
+    if remise_globale_pct < Decimal("0") or remise_globale_pct > Decimal("100"):
+        raise ValueError("La remise doit être comprise entre 0 et 100 %")
+    if taux_tva < Decimal("0") or taux_tva > Decimal("1"):
+        raise ValueError("Le taux de TVA doit être compris entre 0 et 1")
     lignes = (actes or []) + (produits or [])
+    for line in lignes:
+        prix = Decimal(str(line.get("prix", "0")))
+        quantite = Decimal(str(line.get("quantite", "1")))
+        if prix < Decimal("0"):
+            raise ValueError("Le prix d'une ligne ne peut pas être négatif")
+        if quantite <= Decimal("0"):
+            raise ValueError("La quantité doit être strictement positive")
     sous_total = sum(
         (Decimal(str(line["prix"])) * Decimal(str(line.get("quantite", 1))) for line in lignes),
         Decimal("0.000"),
@@ -146,6 +158,11 @@ def _resolve_service_clinic(clinic_id: int | None) -> int:
 
 async def create_facture(data: dict, created_by: int, db, clinic_id: int | None = None) -> Facture:
     clinic_id = _resolve_service_clinic(clinic_id)
+    currency = await get_setting("clinic.currency", db, clinic_id=clinic_id) or {
+        "currency_code": "TND", "currency_symbol": "DT"
+    }
+    currency_code = str(currency.get("currency_code", "TND")).strip().upper()[:3]
+    currency_symbol = str(currency.get("currency_symbol", "DT")).strip()[:8]
     dossier = None
     if data.get("dossier_id") is not None:
         dossier_result = await db.execute(select(DossierMedical).where(
@@ -190,6 +207,8 @@ async def create_facture(data: dict, created_by: int, db, clinic_id: int | None 
             rdv_id=data.get("rdv_id") or (dossier.rdv_id if dossier else None),
             dossier_id=dossier.id if dossier else None,
             numero_facture=await _generate_numero_facture(db),
+            currency_code=currency_code,
+            currency_symbol=currency_symbol,
             date_emission=data.get("date_emission", date.today()),
             date_echeance=data.get("date_echeance"),
             actes=actes_json,
@@ -243,6 +262,11 @@ async def marquer_payee(facture_id: int, mode_paiement: str, db, clinic_id: int 
         raise ValueError("Cette facture est déjà marquée comme payée")
     if facture.statut == StatutFacture.ANNULEE.value:
         raise ValueError("Impossible de payer une facture annulée")
+    if facture.statut not in {StatutFacture.BROUILLON.value, StatutFacture.ENVOYEE.value, StatutFacture.PARTIELLEMENT_PAYEE.value}:
+        raise ValueError(f"Transition de paiement impossible depuis le statut {facture.statut}")
+    mode = (mode_paiement or "").strip().lower()
+    if mode not in {"especes", "carte", "virement", "cheque", "autre"}:
+        raise ValueError("Mode de paiement invalide")
 
     facture.statut = StatutFacture.PAYEE.value
     facture.mode_paiement = mode_paiement
@@ -283,6 +307,11 @@ async def annuler_facture(facture_id: int, motif: str, db, clinic_id: int | None
         raise ValueError("Facture non trouvée")
     if facture.statut == StatutFacture.PAYEE.value:
         raise ValueError("Impossible d'annuler une facture déjà payée — émettre un avoir")
+    if facture.statut == StatutFacture.ANNULEE.value:
+        raise ValueError("Cette facture est déjà annulée")
+    motif = (motif or "").strip()
+    if len(motif) < 3:
+        raise ValueError("Un motif d'annulation explicite est obligatoire")
 
     facture.statut = StatutFacture.ANNULEE.value
     facture.notes = f"{facture.notes or ''}\n[ANNULÉE] {motif}".strip()

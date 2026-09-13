@@ -2,18 +2,17 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
-import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status, Query
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db, limiter
 from middleware.clinic_rbac import require_role
-from models.database import RoleEnum, Utilisateur, UtilisateurActe, ActeMedical
+from models.database import RoleEnum, Utilisateur, ActeMedical
 from services.agenda import get_disponibilites
-from services.branding import get_branding, update_branding, save_logo, save_hero, get_public_content
+from services.branding import get_branding, sanitize_public_branding, update_branding, save_logo, save_hero, get_public_content
 from services.booking_requests import submit_booking_request
 from config import get_settings
 
@@ -66,36 +65,6 @@ class GlobalCurrencyUpdate(BaseModel):
     currency_symbol: str = Field(..., min_length=1, max_length=8)
 
 
-class EmailDeliverySettingsUpdate(BaseModel):
-    """Identité d'envoi publique, sans jamais recevoir de clé API dans l'UI."""
-
-    provider: str = Field(default="resend", pattern="^resend$")
-    sending_domain: str = Field(..., min_length=3, max_length=253)
-    from_email: str = Field(..., min_length=6, max_length=320)
-
-    @field_validator("sending_domain")
-    @classmethod
-    def validate_sending_domain(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if not re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", normalized):
-            raise ValueError("Le domaine d'envoi doit être un nom de domaine valide, sans chemin.")
-        return normalized
-
-    @field_validator("from_email")
-    @classmethod
-    def validate_from_email(cls, value: str) -> str:
-        normalized = value.strip().lower()
-        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized):
-            raise ValueError("L'adresse expéditrice est invalide.")
-        return normalized
-
-    @model_validator(mode="after")
-    def validate_sender_matches_domain(self):
-        if self.from_email.rsplit("@", 1)[-1] != self.sending_domain:
-            raise ValueError("L'adresse expéditrice doit utiliser le domaine d'envoi configuré.")
-        return self
-
-
 class ReservationPublique(BaseModel):
     nom: str
     prenom: str
@@ -112,11 +81,17 @@ class ReservationPublique(BaseModel):
 @router.get("/settings/branding")
 async def get_branding_route(db: AsyncSession = Depends(get_db)):
     """Public — lu par la landing page avec tenant explicitement configuré."""
-    return await get_branding(db, clinic_id=_public_clinic_id())
+    return sanitize_public_branding(await get_branding(db, clinic_id=_public_clinic_id()))
 
 
 @router.get("/settings/currency")
-async def get_currency_route(db: AsyncSession = Depends(get_db), current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN))):
+async def get_currency_route(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(
+        RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE,
+        RoleEnum.ASSISTANTE, RoleEnum.COMMERCIAL, RoleEnum.ADMIN,
+    )),
+):
     from services.clinic_settings import get_setting
     currency = await get_setting("clinic.currency", db, clinic_id=current_user["clinic_id"])
     if not currency:
@@ -139,53 +114,6 @@ async def update_currency_route(
         clinic_id=current_user["clinic_id"],
     )
     return {"status": "success", "currency": payload.model_dump()}
-
-
-async def _email_delivery_response(db: AsyncSession, clinic_id: int) -> dict:
-    from services.clinic_settings import get_setting
-
-    configured = await get_setting("clinic.email_delivery", db, default={}, clinic_id=clinic_id)
-    configured = configured if isinstance(configured, dict) else {}
-    app_settings = get_settings()
-    allowlisted = "email" in app_settings.allowed_external_integrations
-    has_byok_secret = bool(app_settings.resend_api_key)
-    from_email = configured.get("from_email")
-    return {
-        "provider": configured.get("provider", "resend"),
-        "sending_domain": configured.get("sending_domain", ""),
-        "from_email": from_email or "",
-        "byok_secret_configured": has_byok_secret,
-        "email_channel_allowed": allowlisted,
-        "ready": bool(from_email and configured.get("sending_domain") and allowlisted and has_byok_secret),
-        "secret_storage": "deployment_secret_only",
-    }
-
-
-@router.get("/settings/email-delivery")
-async def get_email_delivery_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
-):
-    """Expose l'identité e-mail et l'état BYOK sans révéler la clé Resend."""
-    return await _email_delivery_response(db, current_user["clinic_id"])
-
-
-@router.put("/settings/email-delivery")
-async def update_email_delivery_settings(
-    payload: EmailDeliverySettingsUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
-):
-    from services.clinic_settings import set_setting
-
-    await set_setting(
-        "clinic.email_delivery",
-        payload.model_dump(),
-        description="Identité d'envoi BYOK de la clinique, sans clé API stockée en base",
-        clinic_id=current_user["clinic_id"],
-        db=db,
-    )
-    return await _email_delivery_response(db, current_user["clinic_id"])
 
 
 @router.patch("/settings/branding")
@@ -240,51 +168,16 @@ async def upload_hero_route(
 # ── Gestion des Actes (Admin) ──────────────────────────────
 
 class ActeCreate(BaseModel):
-    nom: str = Field(..., min_length=2, max_length=200)
-    categorie: str = Field(..., min_length=2, max_length=50)
-    duree_minutes: int = Field(..., ge=5, le=480)
-    prix_base: Decimal = Field(..., ge=Decimal("0.000"), max_digits=10, decimal_places=3)
-    is_gratuit: bool = False
+    nom: str
+    categorie: str
+    duree_minutes: int = 30
+    prix_base: Decimal = Decimal("0.000")
     description: Optional[str] = None
     protocole: Optional[str] = None
+    # Les actes créés dans le catalogue clinique doivent être disponibles
+    # pour la réservation et la sélection par les rôles autorisés.
     is_active: bool = True
-    is_public: bool = False
-
-    @field_validator("nom", "categorie")
-    @classmethod
-    def normalize_required_text(cls, value: str) -> str:
-        normalized = " ".join(value.split())
-        if len(normalized) < 2:
-            raise ValueError("Ce champ doit contenir au moins 2 caractères")
-        return normalized
-
-    @model_validator(mode="after")
-    def validate_price_policy(self):
-        if not self.is_gratuit and self.prix_base <= 0:
-            raise ValueError("Un acte payant doit avoir un prix strictement supérieur à 0")
-        return self
-
-
-class ActeUpdate(BaseModel):
-    nom: Optional[str] = Field(default=None, min_length=2, max_length=200)
-    categorie: Optional[str] = Field(default=None, min_length=2, max_length=50)
-    duree_minutes: Optional[int] = Field(default=None, ge=5, le=480)
-    prix_base: Optional[Decimal] = Field(default=None, ge=Decimal("0.000"), max_digits=10, decimal_places=3)
-    is_gratuit: Optional[bool] = None
-    description: Optional[str] = None
-    protocole: Optional[str] = None
-    is_active: Optional[bool] = None
-    is_public: Optional[bool] = None
-
-    @field_validator("nom", "categorie")
-    @classmethod
-    def normalize_optional_text(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return value
-        normalized = " ".join(value.split())
-        if len(normalized) < 2:
-            raise ValueError("Ce champ doit contenir au moins 2 caractères")
-        return normalized
+    is_public: bool = True
 
 class GlobalCurrencyUpdate(BaseModel):
     currency_code: str
@@ -300,40 +193,14 @@ async def list_actes_admin_route(
         .order_by(ActeMedical.nom))
     return result.scalars().all()
 
-
-@router.get("/clinical/actes")
-async def list_actes_cliniques_route(
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE)),
-):
-    """Liste les actes internes actifs autorisés pour le praticien connecté."""
-    result = await db.execute(
-        select(ActeMedical)
-        .join(UtilisateurActe, UtilisateurActe.acte_id == ActeMedical.id)
-        .where(ActeMedical.clinic_id == current_user["clinic_id"])
-        .where(ActeMedical.is_active)
-        .where(UtilisateurActe.utilisateur_id == current_user["id"])
-        .order_by(ActeMedical.categorie, ActeMedical.nom)
-    )
-    return result.scalars().all()
-
 @router.post("/settings/actes", status_code=status.HTTP_201_CREATED)
 async def create_acte_route(
     payload: ActeCreate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
 ):
-    normalized_name = payload.nom.casefold()
-    existing = await db.execute(select(ActeMedical.id).where(
-        ActeMedical.clinic_id == current_user["clinic_id"],
-        ActeMedical.nom_normalise == normalized_name,
-    ))
-    if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Un acte avec ce nom existe déjà dans la clinique")
-    data = payload.model_dump()
-    data["nom_normalise"] = normalized_name
     acte = ActeMedical(
-        **data, clinic_id=current_user["clinic_id"],
+        **payload.model_dump(), clinic_id=current_user["clinic_id"],
     )
     db.add(acte)
     await db.flush()
@@ -342,7 +209,7 @@ async def create_acte_route(
 @router.patch("/settings/actes/{acte_id}")
 async def update_acte_route(
     acte_id: int,
-    payload: ActeUpdate,
+    payload: ActeCreate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
 ):
@@ -354,30 +221,8 @@ async def update_acte_route(
     if not acte:
         raise HTTPException(status_code=404, detail="Acte non trouvé")
     
-    merged = {
-        "nom": acte.nom,
-        "categorie": acte.categorie,
-        "duree_minutes": acte.duree_minutes,
-        "prix_base": acte.prix_base,
-        "is_gratuit": acte.is_gratuit,
-        "description": acte.description,
-        "protocole": acte.protocole,
-        "is_active": acte.is_active,
-        "is_public": acte.is_public,
-    }
-    merged.update(payload.model_dump(exclude_unset=True))
-    validated = ActeCreate.model_validate(merged)
-    normalized_name = validated.nom.casefold()
-    duplicate = await db.execute(select(ActeMedical.id).where(
-        ActeMedical.clinic_id == current_user["clinic_id"],
-        ActeMedical.nom_normalise == normalized_name,
-        ActeMedical.id != acte_id,
-    ))
-    if duplicate.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Un acte avec ce nom existe déjà dans la clinique")
-    for field, value in validated.model_dump().items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(acte, field, value)
-    acte.nom_normalise = normalized_name
     
     await db.flush()
     return acte
@@ -398,8 +243,8 @@ async def public_praticiens_route(db: AsyncSession = Depends(get_db)):
         select(Utilisateur)
         .where(Utilisateur.clinic_id == clinic_id)
         .where(Utilisateur.is_active)
-        .where(Utilisateur.is_public)
         .where(Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]))
+        .where(Utilisateur.is_public)
         .order_by(Utilisateur.prenom, Utilisateur.nom)
     )
     praticiens = result.scalars().all()
@@ -456,8 +301,8 @@ async def public_disponibilites_route(
         .where(Utilisateur.id == praticien_id)
         .where(Utilisateur.clinic_id == clinic_id)
         .where(Utilisateur.is_active)
-        .where(Utilisateur.is_public)
         .where(Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]))
+        .where(Utilisateur.is_public)
     )
     praticien = praticien_result.scalar_one_or_none()
     if not praticien:

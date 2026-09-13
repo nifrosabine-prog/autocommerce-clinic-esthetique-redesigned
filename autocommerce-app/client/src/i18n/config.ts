@@ -5,7 +5,7 @@ import HttpBackend from 'i18next-http-backend';
 
 // Détection intelligente de la langue
 const detectionOptions = {
-  order: ['localStorage', 'navigator', 'htmlTag'],
+  order: ['localStorage', 'htmlTag', 'navigator'],
   caches: ['localStorage'],
   lookupLocalStorage: 'i18nextLng',
 };

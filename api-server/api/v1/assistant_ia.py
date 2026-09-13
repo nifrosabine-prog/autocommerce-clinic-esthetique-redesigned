@@ -1,10 +1,10 @@
 """
-AutoCommerce Clinic — Assistant conversationnel + Agent runtime (Bloc Conversation IA)
+AutoCommerce Clinic — Assistant conversationnel sécurisé + runtime agent optionnel (Bloc Conversation IA)
 
 Routes nouvelles (en plus de l'existant `/assistant/*` historique) :
 
 - POST /assistant/ask         : 1 LLM-call avec tools, mode conversation
-- POST /assistant/agent/run    : vrai runtime agent (ReAct + tools)
+- POST /assistant/agent/run    : runtime agent optionnel (ReAct + tools) lorsque le provider LLM est activé
 - GET  /assistant/capabilities : introspection des tools exposésoodle
 - POST /assistant/cache/clear  : admin only (reset cache LLM)
 
@@ -35,13 +35,16 @@ from core.agent_runtime import (
     AgentRuntime, ToolRegistry, build_default_registry, sanitize_user_context,
 )
 from services import copilote_crm as copilote
+from services import lina_tools
 from services.ai_security import AISecurityDecision, evaluate_request, refusal_message
 from services.medical_guard import MedicalLevel, classify_medical_request, escalation_message
 
 logger = logging.getLogger("assistant_ia")
 
 # Bloc 11 : cette liste correspond exactement aux callables injectés dans run_agent.
-REGISTERED_AGENT_TOOL_NAMES = ("search_patient", "revenue_30d", "draft_whatsapp", "at_risk_patients")
+REGISTERED_AGENT_TOOL_NAMES = (
+    "search_patient", "revenue_30d", "draft_whatsapp", "at_risk_patients",
+)
 
 router = APIRouter(prefix="/assistant-ia", tags=["assistant-ia"])
 
@@ -146,8 +149,13 @@ async def _revenue_30d(session: AsyncSession, clinic_id: int, current_user: Opti
 
 async def _draft_whatsapp(
     session: AsyncSession, patient_id: int, message_type: str,
-    current_user: dict,
+    current_user: dict, **_stray_kwargs,
 ):
+    # Garde-fou : le contrat de l'outil est strictement patient_id +
+    # message_type (voir schéma ToolDef dans core/agent_runtime.py). Si un
+    # LLM invente malgré tout des clés type "recipient"/"message", on les
+    # ignore silencieusement plutôt que de planter — jamais d'envoi basé
+    # sur un contenu halluciné.
     from models.database import Patient
     patient = await session.scalar(select(Patient).where(
         Patient.id == patient_id,
@@ -206,7 +214,9 @@ async def ask_llm(
     msgs.append({"role": "user", "content": payload.question})
     out = await llm.chat(
         msgs, model=payload.model, provider_override=payload.provider,
-        use_cache=True, max_tokens=800,
+        # GPT-5 peut consommer une partie du budget en raisonnement avant
+        # de produire le texte final ; conserver une marge suffisante.
+        use_cache=True, max_tokens=1600,
         budget_subject=f"clinic:{current_user['clinic_id']}:user:{current_user['id']}",
         budget_clinic_id=current_user["clinic_id"],
     )
@@ -262,10 +272,26 @@ async def run_agent(
         search_patient=(lambda query: _search_patient(db, query, current_user)),
         revenue_30d=(lambda: _revenue_30d(db, current_user["clinic_id"], current_user)),
         draft_whatsapp=(
-            lambda patient_id, message_type="appointment_reminder":
-                _draft_whatsapp(db, patient_id, message_type, current_user)
+            lambda patient_id, message_type="appointment_reminder", **_stray:
+                _draft_whatsapp(db, patient_id, message_type, current_user, **_stray)
         ),
         at_risk_patients=(lambda: _at_risk_patients(db, current_user)),
+        analyze_sentiment=(
+            lambda plateforme=None: lina_tools.analyze_sentiment(db, current_user, plateforme)
+        ),
+        propose_dispatch=(
+            lambda period_days=30: lina_tools.propose_dispatch(db, current_user, period_days)
+        ),
+        create_social_post_draft=(
+            lambda plateforme, contenu, media_url=None, date_publication_prevue=None:
+                lina_tools.create_social_post_draft(
+                    db, current_user, plateforme, contenu, media_url, date_publication_prevue,
+                )
+        ),
+        list_social_posts=(
+            lambda plateforme=None, statut=None:
+                lina_tools.list_social_posts_tool(db, current_user, plateforme, statut)
+        ),
     )
     runtime = AgentRuntime(
         llm, registry, max_steps=payload.max_steps,
@@ -307,6 +333,7 @@ async def clear_cache(current_user=Depends(require_role(RoleEnum.ADMIN))):
     return {"status": "cleared"}
 
 class LigneFactureIA(BaseModel):
+    acte_id: Optional[int] = None
     description: str
     prix: float
     quantite: int = 1
@@ -316,6 +343,42 @@ class InvoiceGenerationPayload(BaseModel):
     dossier_id: int
     remise_manuelle_pct: Optional[float] = 0.0
     lignes_ajustees: Optional[list[LigneFactureIA]] = None
+
+
+def _normaliser_nom_acte(value: object) -> str:
+    return " ".join(str(value or "").casefold().split())
+
+
+async def _hydrater_lignes_actes(db, lignes: list[dict], clinic_id: int) -> list[dict]:
+    """Garantit qu'une ligne de facture reprend le tarif catalogue.
+
+    Les anciens dossiers peuvent contenir `prix: 0` ou une ligne sans
+    `acte_id`. Dans ce cas, on rapproche d'abord par identifiant puis par
+    nom dans le catalogue actif. Le prix envoyé par l'interface n'est
+    conservé que lorsqu'il est strictement positif, afin d'autoriser une
+    remise ou un ajustement explicite sans perdre le tarif catalogue.
+    """
+    from models.database import ActeMedical
+
+    catalog_rows = (await db.execute(select(ActeMedical).where(
+        ActeMedical.clinic_id == clinic_id,
+        ActeMedical.is_active.is_(True),
+    ))).scalars().all()
+    by_id = {row.id: row for row in catalog_rows}
+    by_name = {_normaliser_nom_acte(row.nom): row for row in catalog_rows}
+    hydrated: list[dict] = []
+    for raw in lignes:
+        line = dict(raw)
+        acte = by_id.get(line.get("acte_id")) or by_name.get(
+            _normaliser_nom_acte(line.get("description"))
+        )
+        if acte:
+            line["acte_id"] = acte.id
+            line["description"] = acte.nom
+            if float(line.get("prix") or 0) <= 0:
+                line["prix"] = float(acte.prix_base)
+        hydrated.append(line)
+    return hydrated
 
 @router.get("/pending-billing")
 async def list_pending_billing(
@@ -347,7 +410,7 @@ async def list_pending_billing(
                 existing.dossier_id = d.id
             continue
         # Récupérer les noms des actes sélectionnés
-        actes_details = d.actes_details or []
+        actes_details = await _hydrater_lignes_actes(db, d.actes_details or [], current_user["clinic_id"])
         results.append({
             "dossier_id": d.id,
             "date": d.date_acte,
@@ -410,7 +473,8 @@ async def generate_invoice_ia(
 
     remise_totale = min(Decimal(str(remise_auto)) + Decimal(str(payload.remise_manuelle_pct or 0.0)), Decimal("100.00"))
     
-    # Utiliser les lignes ajustées par la secrétaire ou celles du dossier
+    # Utiliser les lignes ajustées par la secrétaire ou celles du dossier,
+    # puis revalider le prix contre le catalogue pour les dossiers historiques.
     actes_a_facturer = []
     if payload.lignes_ajustees:
         actes_a_facturer = [ligne.model_dump() for ligne in payload.lignes_ajustees]
@@ -421,6 +485,9 @@ async def generate_invoice_ia(
                 "prix": float(item.get("prix", 0)),
                 "quantite": 1
             })
+    actes_a_facturer = await _hydrater_lignes_actes(
+        db, actes_a_facturer, current_user["clinic_id"]
+    )
     
     invoice_data = {
         "patient_id": payload.patient_id,

@@ -56,6 +56,30 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
 
   const stopDrawing = () => setIsDrawing(false);
 
+  const startPointerDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = getPos(e as unknown as React.MouseEvent);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+    // Un simple appui est une marque valide, notamment sur écran tactile.
+    setHasSignature(true);
+  };
+
+  const drawPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = getPos(e as unknown as React.MouseEvent);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  };
+
   const clear = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -86,6 +110,11 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
+          onPointerDown={startPointerDrawing}
+          onPointerMove={drawPointer}
+          onPointerUp={stopDrawing}
+          onPointerCancel={stopDrawing}
+          style={{ touchAction: 'none' }}
         />
       </div>
       <p className="text-xs text-muted-foreground">

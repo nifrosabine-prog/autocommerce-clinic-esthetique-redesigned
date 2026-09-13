@@ -239,7 +239,7 @@ async def get_revenue_summary(
     res = await db.execute(
         select(
             func.count(Facture.id).label("nb"),
-            func.coalesce(func.sum(Facture.montant_total_ttc), 0).label("ca"),
+            func.coalesce(func.sum(Facture.total_ttc), 0).label("ca"),
         ).where(
             and_(
                 Facture.clinic_id == current_user.get("clinic_id"),

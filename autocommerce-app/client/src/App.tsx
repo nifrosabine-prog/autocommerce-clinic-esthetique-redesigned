@@ -1,8 +1,8 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -17,8 +17,9 @@ const WorkflowEngine = lazy(() => import("./pages/workflow/WorkflowEngine"));
 const CopiloteCRM = lazy(() => import("./pages/crm/CopiloteCRM"));
 const BusinessIntelligence = lazy(() => import("./pages/analytics/BusinessIntelligence"));
 const AgendaView = lazy(() => import("./pages/agenda/AgendaView"));
+const AccueilPatients = lazy(() => import("./pages/accueil/AccueilPatients"));
+const WorkspacePage = lazy(() => import("./pages/workspace/WorkspacePage"));
 const PatientsList = lazy(() => import("./pages/patients/PatientsList"));
-const ClinicalRecordsList = lazy(() => import("./pages/patients/ClinicalRecordsList"));
 const MedicalFile = lazy(() => import("./pages/patients/MedicalFile"));
 const StockPage = lazy(() => import("./pages/stock/StockPage"));
 const InvoicesPage = lazy(() => import("./pages/invoices/InvoicesPage"));
@@ -36,13 +37,21 @@ const ReportingRH = lazy(() => import("./pages/admin/ReportingRH"));
 const ClinicalOperationsPage = lazy(() => import("./pages/clinical/ClinicalOperationsPage"));
 const DeleguesPage = lazy(() => import("./pages/delegues/DeleguesPage"));
 const LandingPage = lazy(() => import("./pages/public/LandingPage"));
+const PublicApplication = lazy(() => import("./pages/public/PublicApplication"));
 const SuperAdminDashboard = lazy(() => import("./pages/super-admin/SuperAdminDashboard"));
+
+function PricingRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => { setLocation('/settings/actes'); }, [setLocation]);
+  return null;
+}
 
 function Router() {
   return (
     <Suspense fallback={<div className="min-h-screen grid place-items-center bg-background text-foreground">Chargement…</div>}>
       <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/candidature" component={PublicApplication} />
       <Route path="/mfa-verify">{() => <MfaVerification />}</Route>
       <Route path="/super-admin">
         <ProtectedRoute requiredRoles={['super_admin']}>
@@ -69,12 +78,24 @@ function Router() {
           <WorkflowEngine />
         </ProtectedRoute>
       </Route>
+      {/* Legacy URL kept for bookmarks and older deployed menu links. */}
+      <Route path="/automations">
+        <ProtectedRoute requiredRoles={['directrice', 'admin']}>
+          <WorkflowEngine />
+        </ProtectedRoute>
+      </Route>
       <Route path="/copilote-crm">
-        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'admin']}>
+        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'admin']}>
           <CopiloteCRM />
         </ProtectedRoute>
       </Route>
       <Route path="/analytics">
+        <ProtectedRoute requiredRoles={['directrice', 'admin']}>
+          <BusinessIntelligence />
+        </ProtectedRoute>
+      </Route>
+      {/* Legacy URL kept for bookmarks and older deployed menu links. */}
+      <Route path="/business-intelligence">
         <ProtectedRoute requiredRoles={['directrice', 'admin']}>
           <BusinessIntelligence />
         </ProtectedRoute>
@@ -84,30 +105,53 @@ function Router() {
           <AgendaView />
         </ProtectedRoute>
       </Route>
+      <Route path="/accueil">
+        <ProtectedRoute requiredRoles={['directrice', 'assistante', 'admin', 'medecin']}>
+          <AccueilPatients />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/workspace">
+        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'prestataire', 'admin']}>
+          <WorkspacePage />
+        </ProtectedRoute>
+      </Route>
       <Route path="/patients">
         <ProtectedRoute>
           <PatientsList />
         </ProtectedRoute>
       </Route>
-      <Route path="/dossiers">
-        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'admin']}>
-          <ClinicalRecordsList />
+      <Route path="/medical-record/:id">
+        {(params) => (
+          <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
+            <MedicalFile patientId={Number(params.id)} />
+          </ProtectedRoute>
+        )}
+      </Route>
+      <Route path="/medical-record">
+        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
+          <PatientsList mode="medical-record" />
+        </ProtectedRoute>
+      </Route>
+      {/* Legacy URL kept for bookmarks and older deployed menu links. */}
+      <Route path="/dossiers-medicaux">
+        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
+          <PatientsList mode="medical-record" />
         </ProtectedRoute>
       </Route>
       <Route path="/patients/:id">
         {(params) => (
-          <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'admin']}>
+          <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
             <MedicalFile patientId={Number(params.id)} />
           </ProtectedRoute>
         )}
       </Route>
       <Route path="/stock">
-        <ProtectedRoute>
+        <ProtectedRoute requiredRoles={['directrice', 'assistante', 'admin']}>
           <StockPage />
         </ProtectedRoute>
       </Route>
       <Route path="/invoices">
-        <ProtectedRoute>
+        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
           <InvoicesPage />
         </ProtectedRoute>
       </Route>
@@ -153,6 +197,7 @@ function Router() {
           <SettingsPage />
         </ProtectedRoute>
       </Route>
+      <Route path="/pricing"><PricingRedirect /></Route>
       <Route path="/settings/actes">
         <ProtectedRoute requiredRoles={['directrice', 'admin']}>
           <ActesPage />
@@ -174,7 +219,13 @@ function Router() {
         </ProtectedRoute>
       </Route>
       <Route path="/clinical-ops">
-        <ProtectedRoute requiredRoles={['directrice', 'medecin', 'estheticienne', 'assistante', 'admin']}>
+        <ProtectedRoute>
+          <ClinicalOperationsPage />
+        </ProtectedRoute>
+      </Route>
+      {/* Legacy URL kept for bookmarks and older deployed menu links. */}
+      <Route path="/suivi-soins">
+        <ProtectedRoute>
           <ClinicalOperationsPage />
         </ProtectedRoute>
       </Route>

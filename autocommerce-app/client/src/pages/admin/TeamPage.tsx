@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { api } from '@/lib/api';
+import { api, downloadCsv } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
-import { Plus, Edit2, UserPlus, Globe2 } from 'lucide-react';
+import { Download, Plus, Edit2, Trash2, UserPlus, Shield, Palette, Power } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -76,6 +76,11 @@ export default function TeamPage() {
   const [actes, setActes] = useState<Acte[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [isToggling, setIsToggling] = useState<Set<number>>(() => new Set());
+  const togglingUserIdsRef = useRef<Set<number>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     nom: '',
@@ -91,7 +96,7 @@ export default function TeamPage() {
     documents_professionnels: '',
     notes_internes: '',
     agenda_color: '#0066CC',
-    is_public: false,
+    is_public: true,
     acte_ids: [] as number[],
   });
 
@@ -133,7 +138,7 @@ export default function TeamPage() {
         documents_professionnels: (user.documents_professionnels || []).join('\n'),
         notes_internes: user.notes_internes || '',
         agenda_color: user.agenda_color || '#0066CC',
-        is_public: user.is_public,
+        is_public: user.is_public ?? true,
         acte_ids: user.acte_ids || [],
       });
     } else {
@@ -153,7 +158,7 @@ export default function TeamPage() {
         documents_professionnels: '',
         notes_internes: '',
         agenda_color: '#0066CC',
-        is_public: false,
+        is_public: true,
         acte_ids: [],
       });
     }
@@ -171,8 +176,12 @@ export default function TeamPage() {
         documents_professionnels: formData.documents_professionnels.split('\n').map((item) => item.trim()).filter(Boolean),
       };
       if (editingUser) {
-        const { password, ...updateData } = profilePayload;
-        const payload = password ? profilePayload : updateData;
+        const { password, role, ...updateData } = profilePayload;
+        const payload = {
+          ...updateData,
+          ...(role !== 'admin' ? { role } : {}),
+          ...(password ? { password } : {}),
+        };
         await api.patch(`/users/${editingUser.id}`, payload);
         toast.success('Compte mis à jour');
       } else {
@@ -199,17 +208,79 @@ export default function TeamPage() {
     }));
   };
 
+  const handleToggleActive = async (user: User) => {
+    if (togglingUserIdsRef.current.has(user.id)) return;
+    const action = user.is_active ? 'désactiver' : 'réactiver';
+    if (!window.confirm(`Voulez-vous vraiment ${action} ${user.prenom} ${user.nom} ?`)) return;
+    togglingUserIdsRef.current.add(user.id);
+    setIsToggling((current) => new Set(current).add(user.id));
+    try {
+      await api.patch(`/users/${user.id}`, { is_active: !user.is_active });
+      toast.success(user.is_active ? 'Personnel désactivé' : 'Personnel réactivé');
+      await loadData();
+    } catch (err: any) {
+      const message = err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT'
+        ? 'Le serveur met trop de temps à répondre. Réessayez dans quelques instants.'
+        : getApiErrorMessage(err?.response?.data?.detail, `Impossible de ${action} ce personnel`);
+      toast.error(message);
+    } finally {
+      togglingUserIdsRef.current.delete(user.id);
+      setIsToggling((current) => {
+        const next = new Set(current);
+        next.delete(user.id);
+        return next;
+      });
+    }
+  };
+
+  const handleDelete = (user: User) => {
+    setDeletingUser(user);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingUser) return;
+    setIsDeleting(true);
+    try {
+      await api.delete(`/users/${deletingUser.id}`);
+      toast.success('Personnel archivé et anonymisé');
+      setDeletingUser(null);
+      await loadData();
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err?.response?.data?.detail, 'Impossible de supprimer ce personnel'));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      await downloadCsv('/users/export.csv', 'equipe.csv');
+      toast.success('Export CSV téléchargé');
+    } catch (err: any) {
+      toast.error(getApiErrorMessage(err?.response?.data?.detail, 'Erreur lors du téléchargement CSV'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Gestion de l'Équipe</h1>
-            <p className="text-muted-foreground mt-1">Gérez les comptes praticiens et leurs habilitations</p>
+            <p className="text-muted-foreground mt-1">Gérez les comptes de l’équipe et leurs habilitations</p>
           </div>
-          <Button onClick={() => handleOpenDialog()}>
-            <UserPlus className="w-4 h-4 mr-2" /> Nouveau membre
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExportCsv} disabled={isExporting}>
+              <Download className="w-4 h-4 mr-2" />
+              {isExporting ? 'Export en cours...' : 'Exporter CSV'}
+            </Button>
+            <Button onClick={() => handleOpenDialog()}>
+              <UserPlus className="w-4 h-4 mr-2" /> Nouveau membre
+            </Button>
+          </div>
         </div>
 
         <Card>
@@ -226,7 +297,6 @@ export default function TeamPage() {
                     <TableHead>Email</TableHead>
                     <TableHead>Actes</TableHead>
                     <TableHead>Statut</TableHead>
-                    <TableHead>Landing</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -243,21 +313,44 @@ export default function TeamPage() {
                       <TableCell>{u.specialite || '-'}</TableCell>
                       <TableCell>{u.email}</TableCell>
                       <TableCell>{u.acte_ids?.length || 0} acte(s)</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {u.is_active ? 'Actif' : 'Inactif'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {['medecin', 'estheticienne'].includes(u.role) ? (
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${u.is_public ? 'bg-teal-50 text-teal-800' : 'bg-slate-100 text-slate-600'}`}>
-                            <Globe2 className="h-3 w-3" />{u.is_public ? 'Publié' : 'Non publié'}
-                          </span>
-                        ) : '—'}
-                      </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {u.is_active ? 'Actif' : 'Inactif'}
+                            </span>
+                            {u.is_public && <span className="ml-2 px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">En ligne</span>}
+                          </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(u)}>
-                          <Edit2 className="w-4 h-4" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenDialog(u)}
+                          aria-label={`Modifier ${u.prenom} ${u.nom}`}
+                          title={`Modifier ${u.prenom} ${u.nom}`}
+                        >
+                          <Edit2 className="w-4 h-4" aria-hidden="true" />
+                          <span className="sr-only">Modifier {u.prenom} {u.nom}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleActive(u)}
+                          disabled={isToggling.has(u.id)}
+                          aria-label={`${u.is_active ? 'Désactiver' : 'Réactiver'} ${u.prenom} ${u.nom}`}
+                          title={`${u.is_active ? 'Désactiver' : 'Réactiver'} ${u.prenom} ${u.nom}`}
+                        >
+                          <Power className={`w-4 h-4 ${u.is_active ? 'text-amber-600' : 'text-emerald-600'}`} aria-hidden="true" />
+                          <span className="sr-only">{u.is_active ? 'Désactiver' : 'Réactiver'} {u.prenom} {u.nom}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(u)}
+                          aria-label={`Supprimer ${u.prenom} ${u.nom}`}
+                          title={`Supprimer ${u.prenom} ${u.nom}`}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          <span className="sr-only">Supprimer {u.prenom} {u.nom}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -273,7 +366,7 @@ export default function TeamPage() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingUser ? 'Modifier le membre' : 'Nouveau membre'}</DialogTitle>
-            <DialogDescription>Configurez les accès et les pratiques du praticien.</DialogDescription>
+            <DialogDescription>Configurez les accès et les pratiques du médecin.</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-2 gap-4">
@@ -311,7 +404,7 @@ export default function TeamPage() {
                   <option value="estheticienne">Esthéticienne</option>
                   <option value="assistante">Assistante</option>
                   <option value="commercial">Commercial</option>
-                  <option value="admin">Administrateur</option>
+                  {editingUser?.role === 'admin' && <option value="admin">Administrateur</option>}
                 </select>
               </div>
               <div className="grid gap-2">
@@ -327,13 +420,6 @@ export default function TeamPage() {
               </div>
             </div>
 
-            {['medecin', 'estheticienne'].includes(formData.role) && (
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <Checkbox checked={formData.is_public} onCheckedChange={(checked) => setFormData({ ...formData, is_public: checked === true })} />
-                <span><strong className="font-medium text-slate-900">Publier ce praticien à la réservation</strong><br />Son profil actif pourra apparaître sur la landing publique de la clinique.</span>
-              </label>
-            )}
-
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="grid gap-2"><Label htmlFor="adresse">Adresse professionnelle</Label><Input id="adresse" value={formData.adresse} onChange={(e) => setFormData({...formData, adresse: e.target.value})} /></div>
               <div className="grid gap-2"><Label htmlFor="date_embauche">Date d’embauche</Label><Input id="date_embauche" type="date" value={formData.date_embauche} onChange={(e) => setFormData({...formData, date_embauche: e.target.value})} /></div>
@@ -341,6 +427,18 @@ export default function TeamPage() {
               <div className="grid gap-2"><Label htmlFor="certifications">Certifications</Label><textarea id="certifications" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder="Une certification par ligne" value={formData.certifications} onChange={(e) => setFormData({...formData, certifications: e.target.value})} /></div>
               <div className="grid gap-2"><Label htmlFor="documents_professionnels">Documents professionnels</Label><textarea id="documents_professionnels" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder="Références ou URLs, une par ligne" value={formData.documents_professionnels} onChange={(e) => setFormData({...formData, documents_professionnels: e.target.value})} /></div>
               <div className="grid gap-2"><Label htmlFor="notes_internes">Notes internes</Label><textarea id="notes_internes" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" value={formData.notes_internes} onChange={(e) => setFormData({...formData, notes_internes: e.target.value})} /></div>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-md border p-4">
+              <Checkbox
+                id="is_public"
+                checked={formData.is_public}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_public: checked === true })}
+              />
+              <div className="grid gap-1">
+                <Label htmlFor="is_public" className="cursor-pointer">Visible pour les réservations en ligne</Label>
+                <p className="text-sm text-muted-foreground">Contrôle uniquement la visibilité sur la landing page. Le praticien reste disponible dans l’agenda interne.</p>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -364,6 +462,23 @@ export default function TeamPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
             <Button onClick={handleSave}>Sauvegarder</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deletingUser)} onOpenChange={(open) => !open && !isDeleting && setDeletingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer ce membre ?</DialogTitle>
+            <DialogDescription>
+              Le compte de {deletingUser?.prenom} {deletingUser?.nom} sera désactivé et anonymisé. Les données cliniques nécessaires à la traçabilité seront conservées.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingUser(null)} disabled={isDeleting}>Annuler</Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting ? 'Archivage…' : 'Confirmer l’archivage'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

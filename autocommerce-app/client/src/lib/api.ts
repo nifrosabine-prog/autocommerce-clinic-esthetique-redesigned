@@ -55,16 +55,6 @@ export interface BrandingResponse {
   };
 }
 
-export interface EmailDeliverySettings {
-  provider: 'resend';
-  sending_domain: string;
-  from_email: string;
-  byok_secret_configured: boolean;
-  email_channel_allowed: boolean;
-  ready: boolean;
-  secret_storage: 'deployment_secret_only';
-}
-
 export interface PublicPraticien {
   id: number;
   nom: string;
@@ -103,6 +93,8 @@ export interface BookingRequest {
   telephone: string;
   email?: string | null;
   praticien_id?: number | null;
+  praticien_nom?: string | null;
+  acte_nom?: string | null;
   acte_id: number;
   date_heure: string;
   statut: 'pending' | 'accepted' | 'rejected' | string;
@@ -110,6 +102,14 @@ export interface BookingRequest {
   rendez_vous_id?: number | null;
   review_notes?: string | null;
   created_at: string;
+}
+
+export interface PublicChatResponse {
+  reponse: string;
+  statut: string;
+  escalade: boolean;
+  langue?: 'fr' | 'en' | 'ar' | string;
+  actions?: { type: string; label: string; href: string }[];
 }
 
 export interface PublicContent {
@@ -140,6 +140,7 @@ const onTokenRefreshed = (token: string | null) => {
 export const createApiClient = (): AxiosInstance => {
   const client = axios.create({
     baseURL: API_BASE,
+    timeout: 15000,
     withCredentials: true,
     headers: {
       'Content-Type': 'application/json',
@@ -182,6 +183,7 @@ export const createApiClient = (): AxiosInstance => {
         try {
           const response = await axios.post(`${API_BASE}/auth/refresh`, undefined, {
             withCredentials: true,
+            timeout: 15000,
           });
 
           const { access_token } = response.data;
@@ -209,6 +211,82 @@ export const createApiClient = (): AxiosInstance => {
 };
 
 export const api = createApiClient();
+
+export interface AccueilAppointment {
+  id: number;
+  reference?: string | null;
+  patient_id: number;
+  patient_nom: string;
+  telephone?: string | null;
+  source: string;
+  statut: string;
+  praticien_nom?: string | null;
+  acte_nom?: string | null;
+  date_heure_debut: string;
+  salle?: string | null;
+  episode_id?: number | null;
+}
+
+export const accueilApi = {
+  list: (params?: Record<string, string | number | undefined>) =>
+    api.get<AccueilAppointment[]>('/accueil', { params }),
+  markArrived: (rdvId: number) =>
+    api.post<{ rdv_id: number; patient_id: number; episode_id?: number | null; statut: string }>(`/accueil/rdv/${rdvId}/arrivee`),
+  confirmPresence: (rdvId: number) => api.post(`/accueil/rdv/${rdvId}/presence`),
+  confirmExamAgreement: (rdvId: number) => api.post(`/accueil/rdv/${rdvId}/accord`),
+  declareAbsence: (rdvId: number, motif: string) => api.post(`/accueil/rdv/${rdvId}/absence`, { motif }),
+  proposeReplanification: (rdvId: number, dates: string[]) => api.post(`/accueil/rdv/${rdvId}/replanification/proposer`, { dates }),
+  confirmReplanification: (rdvId: number, date_heure: string) => api.post(`/accueil/rdv/${rdvId}/replanification/confirmer`, { date_heure, confirmation_source: 'whatsapp' }),
+  history: (rdvId: number) => api.get(`/accueil/rdv/${rdvId}/evenements`),
+};
+
+export interface WorkspaceCard {
+  key: string;
+  title: string;
+  count: number;
+  description: string;
+  href: string;
+  next_action: string;
+  patient_id?: number | null;
+  episode_id?: number | null;
+  rdv_id?: number | null;
+}
+
+export const workspaceApi = {
+  get: () => api.get<{ role: string; generated_at: string; context: { patient?: number | null; episode?: number | null; rdv?: number | null }; cards: WorkspaceCard[] }>('/workspace'),
+};
+
+/** Télécharge un fichier CSV renvoyé par l’API privée. */
+export const downloadCsv = async (endpoint: string, fallbackFilename: string) => {
+  const response = await api.get(endpoint, { responseType: 'blob' });
+  const contentDisposition = response.headers['content-disposition'] as string | undefined;
+  const filename = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] || fallbackFilename;
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return filename;
+};
+
+/** Télécharge un fichier PDF renvoyé par l'API privée (registre d'audit). */
+export const downloadPdf = async (endpoint: string, fallbackFilename: string) => {
+  const response = await api.get(endpoint, { responseType: 'blob' });
+  const contentDisposition = response.headers['content-disposition'] as string | undefined;
+  const filename = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1] || fallbackFilename;
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return filename;
+};
 
 // Client strictement public : aucun access token et aucun endpoint clinique.
 export const publicApiClient = axios.create({
@@ -318,9 +396,6 @@ export const settingsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  getEmailDelivery: () => api.get<EmailDeliverySettings>('/settings/email-delivery'),
-  updateEmailDelivery: (data: Pick<EmailDeliverySettings, 'provider' | 'sending_domain' | 'from_email'>) =>
-    api.put<EmailDeliverySettings>('/settings/email-delivery', data),
 };
 
 // Public endpoints
@@ -336,6 +411,9 @@ export const publicApi = {
 
   submitCallback: (data: { nom: string; telephone: string; email?: string; message?: string }) =>
     publicApiClient.post<{ lead_id: number; statut: string; message: string }>('/rappel', data),
+
+  chat: (message: string, session_id?: string) =>
+    publicApiClient.post<PublicChatResponse>('/chat', { message, session_id }),
 
   reserveRdv: (data: {
     nom: string;
@@ -354,6 +432,8 @@ export const publicApi = {
 export const bookingRequestsApi = {
   list: (statut = 'pending') =>
     api.get<BookingRequest[]>('/booking-requests', { params: { statut } }),
+  assign: (id: number, praticien_id: number) =>
+    api.patch<BookingRequest>(`/booking-requests/${id}/assign`, { praticien_id }),
   approve: (id: number) => api.post<BookingRequest>(`/booking-requests/${id}/approve`),
   reject: (id: number, notes?: string) =>
     api.post<BookingRequest>(`/booking-requests/${id}/reject`, { notes }),
@@ -405,17 +485,25 @@ export const photosApi = {
     ),
 };
 
+export interface GlobalClinicalTimelineItem {
+  type: string; date: string; auteur_id?: number; role: string; patient_id: number;
+  episode_id?: number | null; statut: string; classification: string; source_id: number; summary: string;
+}
+export interface StructuredPatientExport { format: string; exported_at: string; patient_id: number; classification: string; entries: GlobalClinicalTimelineItem[] }
+export interface MedicalAuditEntry { id: number; action: string; resource_type: string; resource_id: number; patient_id: number; created_at: string; details: Record<string, unknown> }
+
 export const dossierMedicalApi = {
   getTimeline: (patientId: number) => api.get(`/patients/${patientId}/dossiers`),
-
-  getActesCliniques: () => api.get('/clinical/actes'),
-
-  getAppointmentContext: (patientId: number) => api.get<Array<{
-    id: number; acte_id?: number | null; acte_nom: string; date_heure: string; statut: string;
-  }>>(`/patients/${patientId}/contexte-rendez-vous`),
+  getGlobalTimeline: (patientId: number) => api.get<GlobalClinicalTimelineItem[]>(`/patients/${patientId}/global-timeline`),
+  exportStructured: (patientId: number) => api.get<StructuredPatientExport>(`/patients/${patientId}/export-structured`),
+  listAudit: (patientId: number, action?: string) => api.get<MedicalAuditEntry[]>('/audit/medical', { params: { patient_id: patientId, action } }),
+  uploadMedicalDocument: (patientId: number, file: File, description?: string) => {
+    const form = new FormData(); form.append('file', file); if (description) form.append('description', description);
+    return api.post(`/patients/${patientId}/medical-documents`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 
   create: (patientId: number, data: {
-    praticien_id?: number;
+    praticien_id: number;
     rdv_id?: number;
     acte_id?: number;
     date_acte: string;
@@ -425,59 +513,31 @@ export const dossierMedicalApi = {
     suivi_requis?: boolean;
     date_suivi_recommandee?: string;
     actes_details?: any[];
-    statut_clinique?: 'brouillon' | 'cloture';
   }) => api.post(`/patients/${patientId}/dossiers`, data),
-
-  close: (patientId: number, dossierId: number) =>
-    api.post(`/patients/${patientId}/dossiers/${dossierId}/cloturer`),
 
   listConsentements: (patientId: number) => api.get(`/patients/${patientId}/consentements`),
 
-  previewConsentementContractuel: (patientId: number, acteIds: number[]) =>
-    api.post<{ contenu: string; snapshot: { actes: Array<{ id: number; nom: string; prix: number; devise: string }> } }>(
-      `/patients/${patientId}/consentements/apercu-contrat`,
-      { acte_ids: acteIds },
-    ),
-
-  downloadConsentementPreviewPdf: async (patientId: number, acteIds: number[]) => {
-    const res = await api.post(`/patients/${patientId}/consentements/apercu-contrat-pdf`, { acte_ids: acteIds }, { responseType: 'blob' });
-    const url = URL.createObjectURL(res.data);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'apercu-contrat-consentement-non-signe.pdf';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  /** Ouvre un consentement signé après récupération authentifiée du PDF. */
+  getConsentementUrl: async (patientId: number, consentementId: number): Promise<string> => {
+    const res = await api.get(`/patients/${patientId}/consentements/${consentementId}/view`, { responseType: 'blob' });
+    return URL.createObjectURL(res.data);
   },
 
-  signConsentement: (patientId: number, data: {
-    acte_id?: number;
-    acte_ids?: number[];
-    signature_base64: string;
-    signature_praticien_base64?: string;
-    methode_signature?: string;
-    attestation_praticien?: boolean;
-  }) =>
+  openConsentement: async (patientId: number, consentementId: number) => {
+    const url = await dossierMedicalApi.getConsentementUrl(patientId, consentementId);
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
+  signConsentement: (patientId: number, data: { acte_id?: number; signature_base64: string; methode_signature?: string }) =>
     api.post(`/patients/${patientId}/consentements`, data),
-
-  downloadConsentementPdf: async (patientId: number, consentementId: number) => {
-    const res = await api.get(`/patients/${patientId}/consentements/${consentementId}/export-pdf`, { responseType: 'blob' });
-    const url = URL.createObjectURL(res.data);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `contrat-consentement-${consentementId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  },
-
-  emailConsentementPdf: (patientId: number, consentementId: number) =>
-    api.post<{ status: 'sent'; recipient: string; external_message_id?: string }>(
-      `/patients/${patientId}/consentements/${consentementId}/envoyer-email`,
-      { confirmation: true },
-    ),
 
   listPhotos: (patientId: number) => api.get(`/patients/${patientId}/photos`),
 
@@ -514,7 +574,10 @@ export interface EquipeMessage {
 }
 
 export interface EquipeMessageCreate {
-  destinataire_id: number;
+  /** Legacy single-recipient payload remains supported by the API. */
+  destinataire_id?: number;
+  destinataire_ids?: number[];
+  idempotency_key?: string;
   sujet: string;
   contenu: string;
 }
@@ -534,7 +597,7 @@ export const equipeApi = {
   listMembers: () => api.get<EquipeMember[]>('/equipe/membres'),
   // Envoyer un message
   send: (data: EquipeMessageCreate) =>
-    api.post<EquipeMessage>('/equipe/messages', data),
+    api.post<EquipeMessage & { message_ids?: number[]; destinataire_ids?: number[] }>('/equipe/messages', data),
 
   // Boîte de réception
   getInbox: (page = 1, page_size = 20) =>
@@ -616,6 +679,9 @@ export interface SuiviPostActe {
   id: number;
   patient_id: number;
   dossier_id?: number | null;
+  episode_id?: number | null;
+  intervention_id?: number | null;
+  rdv_id?: number | null;
   seance_id?: number | null;
   type_suivi: string;
   echeance_at: string;
@@ -661,10 +727,74 @@ export const clinicalOpsApi = {
   updateSession: (cureId: number, sessionId: number, data: { statut: string; realisee_at?: string; dossier_id?: number; notes?: string }) => api.patch<CureTraitement>(`/clinical-ops/cures/${cureId}/seances/${sessionId}`, data),
   listFollowups: (params?: { statut?: string; horizon_days?: number }) => api.get<SuiviPostActe[]>('/clinical-ops/suivis', { params }),
   createFollowup: (data: Omit<SuiviPostActe, 'id' | 'statut' | 'termine_at'>) => api.post('/clinical-ops/suivis', data),
+  confirmFollowupAppointment: (id: number, data: { date_heure: string; patient_confirme: boolean; salle?: string }) => api.post(`/clinical-ops/suivis/${id}/confirmer-rdv`, data),
   updateFollowup: (id: number, data: { statut: string; notes?: string }) => api.patch(`/clinical-ops/suivis/${id}`, data),
   listAdverseEvents: (params?: { statut?: string; gravite?: string }) => api.get<EvenementIndesirable[]>('/clinical-ops/evenements-indesirables', { params }),
   createAdverseEvent: (data: Omit<EvenementIndesirable, 'id' | 'statut'>) => api.post('/clinical-ops/evenements-indesirables', data),
   updateAdverseEvent: (id: number, data: { statut: string; action_effectuee?: string; praticien_informe?: boolean; suivi?: string }) => api.patch(`/clinical-ops/evenements-indesirables/${id}`, data),
   listProtocols: () => api.get<ProtocoleSoin[]>('/clinical-ops/protocoles'),
+  listGlobalAudit: (params?: { date_debut?: string; date_fin?: string; patient_id?: number; role?: string; action?: string; limit?: number }) => api.get('/clinical-ops/audit-global', { params }),
   createProtocol: (data: Omit<ProtocoleSoin, 'id' | 'actif'>) => api.post('/clinical-ops/protocoles', data),
+};
+
+// ── Bloc B — Faits médicaux structurés (antécédents, allergies, traitements,
+// contre-indications). Lecture/création/désactivation réservées au médecin ;
+// le backend refuse toute identité d'auteur fournie par le client.
+export interface MedicalFactItem {
+  id: number;
+  patient_id: number;
+  episode_id?: number | null;
+  auteur_id: number;
+  type_fait: string;
+  classification: string;
+  source: string;
+  verification_status: string;
+  actif: boolean;
+  donnees: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export const medicalFactsApi = {
+  list: (patientId: number) => api.get<MedicalFactItem[]>(`/patients/${patientId}/medical-facts`),
+  create: (patientId: number, data: {
+    episode_id?: number;
+    type_fait: 'antecedent_medical' | 'antecedent_chirurgical' | 'antecedent_anesthesique' | 'antecedent_familial' | 'allergie' | 'traitement' | 'contre_indication' | string;
+    donnees: Record<string, unknown>;
+    source?: 'MANUAL' | 'MIGRATED';
+    verification_status?: 'VERIFIED' | 'PENDING_VERIFICATION' | 'HISTORICAL_UNSTRUCTURED';
+  }) => api.post(`/patients/${patientId}/medical-facts`, data),
+  /** Suppression logique : la donnée est masquée, l'historique est conservé. */
+  delete: (patientId: number, factId: number) => api.delete(`/patients/${patientId}/medical-facts/${factId}`),
+};
+
+// ── Bloc C — Prescriptions médicales sécurisées. Création/lecture réservées
+// au médecin ; le prescripteur est déduit côté backend de l'utilisateur
+// authentifié (jamais envoyé par le client). Détails chiffrés au repos.
+export interface PrescriptionItem {
+  id: number;
+  patient_id: number;
+  episode_id?: number | null;
+  consultation_id?: number | null;
+  intervention_id?: number | null;
+  acte_id?: number | null;
+  prescripteur_id: number;
+  date_prescription: string;
+  details: Record<string, unknown>;
+  statut: 'ACTIVE' | 'CANCELLED' | 'COMPLETED' | string;
+  classification: string;
+  created_at: string;
+}
+
+export const prescriptionsApi = {
+  list: (patientId: number) => api.get<PrescriptionItem[]>(`/patients/${patientId}/prescriptions`),
+  create: (patientId: number, data: {
+    episode_id?: number;
+    consultation_id?: number;
+    intervention_id?: number;
+    acte_id?: number;
+    date_prescription?: string;
+    details: Record<string, unknown>;
+    statut?: 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
+  }) => api.post(`/patients/${patientId}/prescriptions`, data),
 };

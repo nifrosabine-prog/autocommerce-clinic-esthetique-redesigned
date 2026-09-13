@@ -23,7 +23,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
-from api.v1 import api_router
+from middleware.request_context import RequestContextMiddleware, configure_logging
+from middleware.request_timing import RequestTimingMiddleware
+from api.v1 import (
+    private_router,
+    api_router as v1_router,
+    public_gateway_router,
+    legacy_public_gateway_router,
+)
 from api.deps import dispose_engine, limiter, get_db
 from middleware.clinic_rbac import require_role
 from models.database import RoleEnum
@@ -52,6 +59,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_logging(settings.log_level, settings.log_json)
 
     app = FastAPI(
         title="AutoCommerce Clinic API",
@@ -59,6 +67,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(RequestContextMiddleware)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -71,8 +80,24 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Mesure de la durée de chaque requête HTTP (P0-1) : journalisation en
+    # WARNING des requêtes lentes (>= 5 s) ou en erreur, DEBUG sinon.
+    app.add_middleware(RequestTimingMiddleware)
 
-    app.include_router(api_router)
+    # FastAPI 0.141 conserve les routeurs inclus comme `_IncludedRouter`.
+    # Aplatir ici un niveau de composition rend les routes effectives tout en
+    # conservant les frontières et préfixes historiques.
+    def include_flat_router(aggregate_router) -> None:
+        for child in aggregate_router.routes:
+            original = getattr(child, "original_router", None)
+            context = getattr(child, "include_context", None)
+            if original is not None and context is not None:
+                app.include_router(original, prefix=context.prefix)
+
+    include_flat_router(public_gateway_router)
+    include_flat_router(private_router)
+    include_flat_router(v1_router)
+    include_flat_router(legacy_public_gateway_router)
 
     settings.branding_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/static/branding", StaticFiles(directory=str(settings.branding_dir)), name="branding")
@@ -129,8 +154,14 @@ def create_app() -> FastAPI:
         pass  # Prometheus non critique
 
     # En production, le build React est copié dans api-server/web-dist.
-    # Le frontend et l'API sont ainsi servis par la même URL Railway.
-    frontend_dir = Path(__file__).resolve().parent / "web-dist"
+    # En recette locale, servir en priorité le build courant du monorepo afin
+    # d’éviter qu’une copie web-dist obsolète masque les corrections validées.
+    project_root = Path(__file__).resolve().parent.parent
+    frontend_candidates = (
+        project_root / "autocommerce-app" / "dist" / "public",
+        Path(__file__).resolve().parent / "web-dist",
+    )
+    frontend_dir = next((candidate for candidate in frontend_candidates if (candidate / "index.html").is_file()), frontend_candidates[-1])
     frontend_root = frontend_dir.resolve()
     if frontend_root.is_dir() and (frontend_root / "index.html").is_file():
         assets_dir = frontend_root / "assets"

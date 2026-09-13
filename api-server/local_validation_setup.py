@@ -7,16 +7,12 @@ from models.database import Base, Utilisateur, RoleEnum, Patient, ActeMedical, U
 from models import omnicanal as _omnicanal  # noqa: F401
 from models import security as _security  # noqa: F401
 from models import workflow_engine as _workflow_engine  # noqa: F401
+from models import episode_core as _episode_core  # noqa: F401
 from middleware.auth import get_password_hash
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
 async def main() -> None:
-    if os.getenv("ALLOW_LOCAL_VALIDATION_SEED") != "1":
-        raise RuntimeError("Le seed de validation locale exige ALLOW_LOCAL_VALIDATION_SEED=1.")
-    validation_password = os.getenv("LOCAL_VALIDATION_PASSWORD")
-    if not validation_password:
-        raise RuntimeError("LOCAL_VALIDATION_PASSWORD est obligatoire pour le seed local.")
     engine = create_async_engine(DATABASE_URL)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -27,21 +23,10 @@ async def main() -> None:
             db.add(Utilisateur(
                 clinic_id=1,
                 email="admin@clinic.local",
-                hashed_password=get_password_hash(validation_password),
+                hashed_password=get_password_hash("LocalValidationOnly-2026!"),
                 nom="Validation",
                 prenom="Admin",
                 role=RoleEnum.DIRECTRICE.value,
-                is_active=True,
-            ))
-        assistant = await db.scalar(select(Utilisateur).where(Utilisateur.email == "assistant@clinic.local"))
-        if assistant is None:
-            db.add(Utilisateur(
-                clinic_id=1,
-                email="assistant@clinic.local",
-                hashed_password=get_password_hash(validation_password),
-                nom="Validation",
-                prenom="Assistant",
-                role=RoleEnum.ASSISTANTE.value,
                 is_active=True,
             ))
         practitioner = await db.scalar(select(Utilisateur).where(Utilisateur.email == "doctor@clinic.local"))
@@ -49,13 +34,12 @@ async def main() -> None:
             practitioner = Utilisateur(
                 clinic_id=1,
                 email="doctor@clinic.local",
-                hashed_password=get_password_hash(validation_password),
+                hashed_password=get_password_hash("LocalValidationOnly-2026!"),
                 nom="Martin",
                 prenom="Ada",
                 role=RoleEnum.MEDECIN.value,
                 specialite="Médecine esthétique",
                 is_active=True,
-                is_public=True,
             )
             db.add(practitioner)
             await db.flush()
@@ -64,14 +48,11 @@ async def main() -> None:
             acte = ActeMedical(
                 clinic_id=1,
                 nom="Consultation esthétique",
-                nom_normalise="consultation esthétique",
                 categorie="consultation",
                 duree_minutes=45,
                 prix_base=150,
-                is_gratuit=False,
                 description="Évaluation initiale",
                 is_active=True,
-                is_public=True,
             )
             db.add(acte)
             await db.flush()

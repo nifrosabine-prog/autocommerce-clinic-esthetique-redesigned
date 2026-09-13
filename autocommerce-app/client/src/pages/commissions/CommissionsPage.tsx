@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
-import { AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Table,
@@ -15,6 +15,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/hooks/useCurrency';
+import { formatMoney } from '@/lib/currency';
 
 interface Commission {
   id: number;
@@ -24,14 +26,20 @@ interface Commission {
   statut: 'en_attente' | 'validation_partielle' | 'validee' | 'payee';
   validateur_1_id?: number;
   validateur_1_nom?: string;
+  validateur_2_id?: number;
+  validateur_2_nom?: string;
+  validee_par_id_2?: number;
+  validated_at_2?: string;
   date_creation: string;
 }
 
 export default function CommissionsPage() {
   const { user } = useAuth();
+  const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [validatingId, setValidatingId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadCommissions();
@@ -43,8 +51,10 @@ export default function CommissionsPage() {
       const response = await api.get('/commissions');
       // Le backend renvoie un tableau brut, pas { commissions: [...] }
       setCommissions(Array.isArray(response.data) ? response.data : []);
+      setLoadError(null);
     } catch (err: any) {
       console.error('Failed to load commissions:', err);
+      setLoadError('Erreur lors du chargement des commissions');
       toast.error('Erreur lors du chargement des commissions');
     } finally {
       setIsLoading(false);
@@ -117,14 +127,16 @@ export default function CommissionsPage() {
     }
   };
 
-  const getStatusLabel = (statut: string) => {
+  const getStatusLabel = (statut: string, commission?: Commission) => {
     switch (statut) {
       case 'en_attente':
         return 'En attente';
       case 'validation_partielle':
         return 'Validation partielle';
       case 'validee':
-        return 'Validée';
+        return (commission?.validateur_2_id || commission?.validee_par_id_2)
+          ? 'Double-validée'
+          : 'Validée';
       case 'payee':
         return 'Payée';
       default:
@@ -133,6 +145,29 @@ export default function CommissionsPage() {
   };
 
   const needsDoubleValidation = (montant: number) => montant > 500;
+
+  if (loadError && commissions.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <Card className="w-full max-w-md border-red-300 bg-red-50/70">
+            <CardContent className="flex items-center justify-between gap-4 py-6">
+              <div className="flex items-center gap-3 text-red-800">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Impossible de charger les commissions</p>
+                  <p className="text-sm text-red-700">{loadError}</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => void loadCommissions()}>
+                <RefreshCw className="w-4 h-4 mr-2" /> Réessayer
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -174,7 +209,7 @@ export default function CommissionsPage() {
                       <TableHead>Commercial</TableHead>
                       <TableHead>Montant</TableHead>
                       <TableHead>Statut</TableHead>
-                      <TableHead>Validateur 1</TableHead>
+                      <TableHead>Validateurs</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -185,7 +220,7 @@ export default function CommissionsPage() {
                         <TableCell className="font-medium">{commission.commercial_nom}</TableCell>
                         <TableCell>
                           <span className={needsDoubleValidation(commission.montant) ? 'font-bold text-orange-600' : ''}>
-                            {commission.montant} DT
+                            {formatMoney(commission.montant, currency)}
                           </span>
                           {needsDoubleValidation(commission.montant) && (
                             <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
@@ -197,15 +232,16 @@ export default function CommissionsPage() {
                           <div className="flex items-center gap-2">
                             {getStatusIcon(commission.statut)}
                             <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(commission.statut)}`}>
-                              {getStatusLabel(commission.statut)}
+                              {getStatusLabel(commission.statut, commission)}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {commission.validateur_1_nom ? (
-                            <span>{commission.validateur_1_nom}</span>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
+                          <div>{commission.validateur_1_nom || <span className="text-muted-foreground">-</span>}</div>
+                          {commission.validateur_2_nom && (
+                            <div className="text-xs text-muted-foreground">
+                              2e : {commission.validateur_2_nom}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">

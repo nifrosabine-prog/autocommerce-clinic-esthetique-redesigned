@@ -43,39 +43,39 @@
 }
 
 :root {
-  --primary: oklch(0.48 0.11 190);
-  --primary-foreground: oklch(0.99 0.005 190);
-  --sidebar-primary: oklch(0.48 0.11 190);
-  --sidebar-primary-foreground: oklch(0.99 0.005 190);
-  --chart-1: oklch(0.58 0.11 190);
-  --chart-2: oklch(0.52 0.1 215);
-  --chart-3: oklch(0.48 0.11 190);
-  --chart-4: oklch(0.64 0.14 155);
-  --chart-5: oklch(0.63 0.15 55);
-  --radius: 0.85rem;
-  --background: oklch(0.985 0.006 230);
-  --foreground: oklch(0.23 0.035 250);
+  --primary: var(--color-blue-700);
+  --primary-foreground: var(--color-blue-50);
+  --sidebar-primary: var(--color-blue-600);
+  --sidebar-primary-foreground: var(--color-blue-50);
+  --chart-1: var(--color-blue-300);
+  --chart-2: var(--color-blue-500);
+  --chart-3: var(--color-blue-600);
+  --chart-4: var(--color-blue-700);
+  --chart-5: var(--color-blue-800);
+  --radius: 0.65rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.235 0.015 65);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.23 0.035 250);
+  --card-foreground: oklch(0.235 0.015 65);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.23 0.035 250);
-  --secondary: oklch(0.965 0.012 215);
-  --secondary-foreground: oklch(0.29 0.036 250);
-  --muted: oklch(0.963 0.008 225);
-  --muted-foreground: oklch(0.49 0.03 245);
-  --accent: oklch(0.95 0.025 190);
-  --accent-foreground: oklch(0.28 0.07 190);
+  --popover-foreground: oklch(0.235 0.015 65);
+  --secondary: oklch(0.98 0.001 286.375);
+  --secondary-foreground: oklch(0.4 0.015 65);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.141 0.005 285.823);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.9 0.012 230);
-  --input: oklch(0.88 0.015 225);
-  --ring: oklch(0.52 0.11 190);
-  --sidebar: oklch(0.18 0.045 255);
-  --sidebar-foreground: oklch(0.93 0.01 220);
-  --sidebar-accent: oklch(0.25 0.05 250);
-  --sidebar-accent-foreground: oklch(0.98 0.005 210);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.11 190);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.623 0.214 259.815);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.235 0.015 65);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.623 0.214 259.815);
 }
 
 .dark {
@@ -119,8 +119,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
-    text-rendering: optimizeLegibility;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -183,7 +181,7 @@
   .clinic-sidebar [data-sidebar="menu-button"] {
     color: rgb(191 219 254 / 0.72);
     border-radius: 0.7rem;
-    transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    transition: background-color 160ms ease, color 160ms ease;
   }
 
   .clinic-sidebar [data-sidebar="menu-button"]:hover {
@@ -193,8 +191,8 @@
 
   .clinic-sidebar [data-sidebar="menu-button"][data-active="true"] {
     color: white;
-    background: linear-gradient(90deg, rgb(13 148 136 / 0.92), rgb(15 118 110 / 0.8));
-    box-shadow: 0 8px 20px -12px rgb(13 148 136 / 0.8);
+    background: linear-gradient(90deg, rgb(14 165 233 / 0.9), rgb(37 99 235 / 0.72));
+    box-shadow: 0 8px 20px -12px rgb(14 165 233 / 0.9);
   }
 
   .clinic-sidebar [data-sidebar="menu-button"] svg {
@@ -205,5 +203,22 @@
 @media (max-width: 640px) {
   .clinic-sidebar [data-sidebar="menu-button"] {
     font-size: 0.8rem;
+  }
+}
+
+
+@layer components {
+  .landing-mba {
+    font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .landing-mba .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+
+  .landing-mba a,
+  .landing-mba button {
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
   }
 }

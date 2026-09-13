@@ -10,7 +10,7 @@ from pydantic import Field, field_validator
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 
 from api.deps import get_db
 from middleware.clinic_rbac import require_role
@@ -23,7 +23,6 @@ from models.workflow_engine import (
     WorkflowTriggerType,
     WORKFLOW_TEMPLATES_PREDEFINED,
 )
-from models.security import TacheInterneAssistant
 from services.workflow_engine import WorkflowEngineService
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -106,44 +105,6 @@ class WorkflowExecutionResponse(BaseModel):
     created_at: str
 
 
-# Configuration métier exposée au constructeur visuel. Les clés stables restent
-# sérialisées côté workflow, tandis que les libellés et options peuvent évoluer
-# ici sans imposer une structure technique à l’utilisateur clinique.
-WORKFLOW_CLINICAL_CATALOG = {
-    "triggers": [
-        {"key": "manual", "trigger_type": "manual", "event_type": "manual", "label": "À la demande", "description": "Le membre de l’équipe lance le scénario lorsqu’il le décide."},
-        {"key": "after_act", "trigger_type": "event_based", "event_type": "appointment_completed", "label": "Après un acte", "description": "À la fin d’un rendez-vous ou d’un acte enregistré."},
-        {"key": "after_injection", "trigger_type": "event_based", "event_type": "injection_completed", "label": "Après une injection", "description": "Pour organiser un contrôle ou un suivi spécifique."},
-        {"key": "after_treatment", "trigger_type": "event_based", "event_type": "aesthetic_treatment_completed", "label": "Après un traitement esthétique", "description": "Pour préparer un suivi à distance."},
-        {"key": "callback_request", "trigger_type": "event_based", "event_type": "callback_requested", "label": "Quand un rappel est demandé", "description": "Pour ne laisser aucune demande de rappel sans suite."},
-        {"key": "pending_consent", "trigger_type": "event_based", "event_type": "consent_pending", "label": "Quand un consentement manque", "description": "Pour préparer le rappel de signature avant un acte."},
-        {"key": "inactive_patient", "trigger_type": "condition_based", "event_type": "patient_inactive", "label": "Patient inactif", "description": "Après une période sans visite, définie ci-dessous."},
-        {"key": "unaccepted_quote", "trigger_type": "condition_based", "event_type": "quote_not_accepted", "label": "Devis non accepté", "description": "Après un délai de relance défini ci-dessous."},
-        {"key": "monthly", "trigger_type": "scheduled", "event_type": "monthly", "label": "Chaque mois", "description": "Pour une revue ou une campagne planifiée."},
-        {"key": "birthday", "trigger_type": "scheduled", "event_type": "birthday", "label": "Anniversaire patient", "description": "Le jour de l’anniversaire du patient."},
-    ],
-    "actions": [
-        {"value": "create_task", "label": "Créer une tâche interne", "description": "Visible dans la file de l’équipe.", "tone": "teal"},
-        {"value": "send_whatsapp", "label": "Préparer un WhatsApp", "description": "Toujours soumis à validation humaine avant envoi.", "tone": "amber"},
-        {"value": "send_sms", "label": "Préparer un SMS", "description": "Toujours soumis à validation humaine avant envoi.", "tone": "amber"},
-        {"value": "send_email", "label": "Préparer un e-mail", "description": "Toujours soumis à validation humaine avant envoi.", "tone": "amber"},
-        {"value": "add_fidelite_points", "label": "Ajouter des points fidélité", "description": "Valorise un suivi ou une campagne définie.", "tone": "violet"},
-        {"value": "launch_campaign", "label": "Préparer une campagne", "description": "Prépare une campagne à vérifier avant diffusion.", "tone": "violet"},
-    ],
-    "patient_segments": [
-        {"value": "all", "label": "Tous les patients éligibles"},
-        {"value": "new", "label": "Nouveaux patients"},
-        {"value": "returning", "label": "Patients déjà suivis"},
-        {"value": "vip", "label": "Patients VIP / fidélité élevée"},
-    ],
-    "appointment_scopes": [
-        {"value": "any", "label": "Tout contexte de rendez-vous"},
-        {"value": "confirmed", "label": "Rendez-vous confirmé"},
-        {"value": "completed", "label": "Acte ou rendez-vous réalisé"},
-    ],
-}
-
-
 def _serialize_template(index: int, template: dict) -> dict:
     return {
         "id": f"template-{index}",
@@ -186,9 +147,6 @@ async def list_workflows(
                     "nom": w.nom,
                     "description": w.description,
                     "trigger_type": w.trigger_type,
-                    "trigger_config": w.trigger_config,
-                    "conditions": w.conditions,
-                    "actions": w.actions,
                     "enabled": w.enabled,
                     "status": w.status,
                     "created_at": w.created_at.isoformat(),
@@ -251,56 +209,6 @@ async def list_workflow_templates(
     return {
         "status": "success",
         "data": [_serialize_template(index, template) for index, template in enumerate(WORKFLOW_TEMPLATES_PREDEFINED, start=1)],
-    }
-
-
-@router.get("/catalog", summary="Obtenir le catalogue métier du constructeur")
-async def get_workflow_clinical_catalog(
-    current_user: dict = Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
-):
-    return {"status": "success", "data": WORKFLOW_CLINICAL_CATALOG}
-
-
-@router.get("/tasks/mine", summary="Lister les tâches attribuées au rôle connecté")
-async def list_assigned_tasks(
-    current_user: dict = Depends(require_role(
-        RoleEnum.DIRECTRICE,
-        RoleEnum.MEDECIN,
-        RoleEnum.ESTHETICIENNE,
-        RoleEnum.ASSISTANTE,
-        RoleEnum.COMMERCIAL,
-        RoleEnum.ADMIN,
-    )),
-    session: AsyncSession = Depends(get_db),
-):
-    """Retourne la file personnelle ou de rôle, sans exposer de dossier clinique."""
-    statement = (
-        select(TacheInterneAssistant)
-        .where(TacheInterneAssistant.clinic_id == current_user["clinic_id"])
-        .where(
-            or_(
-                TacheInterneAssistant.assignee_id == current_user["id"],
-                TacheInterneAssistant.assignee_role == current_user["role"],
-            )
-        )
-        .order_by(TacheInterneAssistant.due_at.asc().nulls_last(), TacheInterneAssistant.created_at.desc())
-        .limit(100)
-    )
-    tasks = (await session.execute(statement)).scalars().all()
-    return {
-        "status": "success",
-        "data": [
-            {
-                "id": task.id,
-                "titre": task.titre,
-                "description": task.description,
-                "priorite": task.priorite,
-                "statut": task.statut,
-                "due_at": task.due_at.isoformat() if task.due_at else None,
-                "created_at": task.created_at.isoformat(),
-            }
-            for task in tasks
-        ],
     }
 
 

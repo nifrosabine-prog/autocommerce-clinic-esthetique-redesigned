@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Select,
@@ -21,22 +21,29 @@ const LANGUAGES: LanguageOption[] = [
   { code: 'en', name: 'English', flag: '🇬🇧', nativeName: 'English' },
   { code: 'it', name: 'Italiano', flag: '🇮🇹', nativeName: 'Italiano' },
   { code: 'de', name: 'Deutsch', flag: '🇩🇪', nativeName: 'Deutsch' },
+  { code: 'ar', name: 'العربية', flag: '🇹🇳', nativeName: 'العربية' },
 ];
 
 export const LanguageSwitcher: React.FC = () => {
   const { i18n, t } = useTranslation();
+
+  useEffect(() => {
+    const isArabic = (i18n.resolvedLanguage || i18n.language || 'fr').startsWith('ar');
+    document.documentElement.lang = isArabic ? 'ar' : (i18n.resolvedLanguage || i18n.language || 'fr');
+    document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
+  }, [i18n.resolvedLanguage, i18n.language]);
 
   const handleLanguageChange = (languageCode: string) => {
     i18n.changeLanguage(languageCode);
     localStorage.setItem('i18nextLng', languageCode);
   };
 
-  const currentLanguage = LANGUAGES.find((lang) => lang.code === i18n.language) || LANGUAGES[0];
+  const currentCode = (i18n.resolvedLanguage || i18n.language || 'fr').split('-')[0];
 
   return (
     <div className="flex items-center gap-2">
-      <Select value={i18n.language} onValueChange={handleLanguageChange}>
-        <SelectTrigger className="w-[160px] flex items-center gap-2">
+      <Select value={currentCode} onValueChange={handleLanguageChange}>
+        <SelectTrigger className="w-[160px] flex items-center gap-2" aria-label={t('common.language')}>
           <Globe className="w-4 h-4" />
           <SelectValue placeholder={t('common.language')} />
         </SelectTrigger>

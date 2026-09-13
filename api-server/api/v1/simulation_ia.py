@@ -27,11 +27,15 @@ class SimulationRequest(BaseModel):
     intensite: int = Field(default=20, ge=0, le=100)
     instructions: Optional[str] = None
     masque_base64: Optional[str] = None
+    episode_id: Optional[int] = None
+    intervention_id: Optional[int] = None
 
 
 class SimulationIAConsentRequest(BaseModel):
     signature_base64: str
     methode_signature: str = "tactile"
+    episode_id: Optional[int] = None
+    intervention_id: Optional[int] = None
 
 
 async def _sign_simulation_ia_consent(
@@ -56,6 +60,8 @@ async def _sign_simulation_ia_consent(
             db=db,
             type_consentement="simulation_ia",
             clinic_id=clinic_id,
+            episode_id=data.episode_id,
+            intervention_id=data.intervention_id,
         )
         return {
             "consentement_id": consent.id,
@@ -115,11 +121,15 @@ async def post_simulation(
             genere_par_id=current_user["id"],
             db=db,
             clinic_id=current_user["clinic_id"],
+            episode_id=data.episode_id,
+            intervention_id=data.intervention_id,
         )
         return {
             "simulation_id": simulation.id,
             "url_resultat": f"/api/v1/simulation-ia/patients/{patient_id}/simulations/{simulation.id}/view",
-            "created_at": simulation.created_at.isoformat()
+            "created_at": simulation.created_at.isoformat(),
+            "episode_id": getattr(simulation, "episode_id", data.episode_id),
+            "intervention_id": getattr(simulation, "intervention_id", data.intervention_id),
         }
     except MedicalAIBlocked as e:
         raise HTTPException(status_code=503, detail=str(e)) from e

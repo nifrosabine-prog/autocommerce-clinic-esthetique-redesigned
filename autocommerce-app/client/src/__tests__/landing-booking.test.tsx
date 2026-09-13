@@ -57,9 +57,9 @@ describe("LandingPage — Public Gateway et BookingRequest", () => {
     renderLanding();
 
     expect(await screen.findByText("Réserver un rendez-vous")).toBeInTheDocument();
-    expect(screen.getByLabelText("Praticien")).toHaveDisplayValue("Sélectionner un praticien");
+    expect(screen.getByLabelText("Médecin")).toHaveDisplayValue("Sélectionner un médecin");
     expect(screen.getByText("Dr Ada Martin")).toBeInTheDocument();
-    expect(screen.getByText("Consultation esthétique")).toBeInTheDocument();
+    expect(screen.getByLabelText("Acte").querySelector(`option[value="${acte.id}"]`)).toHaveTextContent("Consultation esthétique");
     expect(publicApi.getPraticiens).toHaveBeenCalledTimes(1);
     expect(publicApi.getActes).toHaveBeenCalledTimes(1);
   });
@@ -68,11 +68,39 @@ describe("LandingPage — Public Gateway et BookingRequest", () => {
     renderLanding();
     await screen.findByText("Réserver un rendez-vous");
 
-    fireEvent.change(screen.getByLabelText("Praticien"), { target: { value: String(praticien.id) } });
+    fireEvent.change(screen.getByLabelText("Médecin"), { target: { value: String(praticien.id) } });
     fireEvent.change(screen.getByLabelText("Acte"), { target: { value: String(acte.id) } });
 
     await waitFor(() => expect(publicApi.getDisponibilites).toHaveBeenCalled());
-    expect(await screen.findByText("10:30")).toBeInTheDocument();
+    expect((await screen.findAllByRole("option", { name: /Matin/ })).length).toBeGreaterThan(0);
+  });
+
+  it("propose le prochain jour ouvré si le jour courant n’a plus de créneau", async () => {
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const getDisponibilites = vi.spyOn(publicApi, "getDisponibilites").mockImplementation(async (_praticienId, params) => ({
+      data: {
+        praticien_id: praticien.id,
+        date: params?.date,
+        duree_minutes: acte.duree_minutes,
+        creneaux: params?.date === todayIso ? [] : [slot],
+      },
+    } as never));
+
+    renderLanding();
+    await screen.findByText("Réserver un rendez-vous");
+    fireEvent.change(screen.getByLabelText("Médecin"), { target: { value: String(praticien.id) } });
+    fireEvent.change(screen.getByLabelText("Acte"), { target: { value: String(acte.id) } });
+
+    await waitFor(() => expect(
+      getDisponibilites.mock.calls.some(([, params]) => params?.date !== todayIso)
+    ).toBe(true));
+    expect(getDisponibilites.mock.calls[0][1]?.date).toBe(todayIso);
+    expect(getDisponibilites.mock.calls.some(([, params]) => params?.date !== todayIso)).toBe(true);
+    expect(toast.info).toHaveBeenCalledWith(
+      "Aucun créneau restant aujourd’hui. Nous vous proposons le prochain jour ouvré."
+    );
+    expect((await screen.findAllByRole("option", { name: /Matin/ })).length).toBeGreaterThan(0);
   });
 
   it("bloque une réservation avec un téléphone invalide avant l’appel API", async () => {
@@ -95,10 +123,10 @@ describe("LandingPage — Public Gateway et BookingRequest", () => {
     fireEvent.change(screen.getByLabelText("Prénom"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Martin" } });
     fireEvent.change(screen.getByLabelText("Téléphone"), { target: { value: "+216 12 345 678" } });
-    fireEvent.change(screen.getByLabelText("Praticien"), { target: { value: String(praticien.id) } });
+    fireEvent.change(screen.getByLabelText("Médecin"), { target: { value: String(praticien.id) } });
     fireEvent.change(screen.getByLabelText("Acte"), { target: { value: String(acte.id) } });
-    await screen.findByText("10:30");
-    fireEvent.change(screen.getByLabelText("Créneau disponible"), { target: { value: slot.datetime } });
+    await screen.findAllByRole("option", { name: /Matin/ });
+    fireEvent.change(screen.getByLabelText("Période souhaitée"), { target: { value: "matin" } });
     fireEvent.submit(screen.getByRole("button", { name: "Réserver" }).closest("form") as HTMLFormElement);
     expect(reserveRdv).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith("Veuillez accepter la notice de confidentialité");
@@ -114,10 +142,10 @@ describe("LandingPage — Public Gateway et BookingRequest", () => {
     fireEvent.change(screen.getByLabelText("Prénom"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Martin" } });
     fireEvent.change(screen.getByLabelText("Téléphone"), { target: { value: "+216 12 345 678" } });
-    fireEvent.change(screen.getByLabelText("Praticien"), { target: { value: String(praticien.id) } });
+    fireEvent.change(screen.getByLabelText("Médecin"), { target: { value: String(praticien.id) } });
     fireEvent.change(screen.getByLabelText("Acte"), { target: { value: String(acte.id) } });
-    await screen.findByText("10:30");
-    fireEvent.change(screen.getByLabelText("Créneau disponible"), { target: { value: slot.datetime } });
+    await screen.findAllByRole("option", { name: /Matin/ });
+    fireEvent.change(screen.getByLabelText("Période souhaitée"), { target: { value: "matin" } });
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getByRole("button", { name: "Réserver" }));
 
@@ -144,10 +172,10 @@ describe("LandingPage — Public Gateway et BookingRequest", () => {
     fireEvent.change(screen.getByLabelText("Prénom"), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Martin" } });
     fireEvent.change(screen.getByLabelText("Téléphone"), { target: { value: "+216 12 345 678" } });
-    fireEvent.change(screen.getByLabelText("Praticien"), { target: { value: String(praticien.id) } });
+    fireEvent.change(screen.getByLabelText("Médecin"), { target: { value: String(praticien.id) } });
     fireEvent.change(screen.getByLabelText("Acte"), { target: { value: String(acte.id) } });
-    await screen.findByText("10:30");
-    fireEvent.change(screen.getByLabelText("Créneau disponible"), { target: { value: slot.datetime } });
+    await screen.findAllByRole("option", { name: /Matin/ });
+    fireEvent.change(screen.getByLabelText("Période souhaitée"), { target: { value: "matin" } });
     fireEvent.click(screen.getAllByRole("checkbox")[0]);
     fireEvent.click(screen.getByRole("button", { name: "Réserver" }));
 

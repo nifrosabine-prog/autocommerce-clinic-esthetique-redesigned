@@ -4,7 +4,7 @@ Chiffrement Fernet, timeline, export PDF
 """
 
 import io
-from datetime import datetime, time
+from datetime import datetime
 from typing import List, Optional
 
 from cryptography.fernet import Fernet
@@ -19,12 +19,13 @@ from sqlalchemy import select
 from config import get_settings
 from models.database import (
     DossierMedical, Patient, Utilisateur, ActeMedical, Facture, RendezVous,
-    PhotoClinic, Consentement, RoleEnum, UtilisationLot, LotInjectable, SuiviPostActe,
+    PhotoClinic, Consentement, UtilisationLot, LotInjectable,
     ProduitInjectable,
 )
 from services.consentement import verify_consent
 from services.audit_medical import log_access
 from services.branding import get_branding_context
+from models.episode_core import EpisodePatient
 
 settings = get_settings()
 
@@ -71,6 +72,7 @@ async def create_dossier(
     clinic_id: int | None = None,
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
+    draft: bool = False,
 ) -> DossierMedical:
     """Crée un dossier médical.
 
@@ -95,7 +97,6 @@ async def create_dossier(
             Utilisateur.id == praticien_id,
             Utilisateur.clinic_id == clinic_id,
             Utilisateur.is_active,
-            Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]),
         )
     )
     if not praticien:
@@ -127,15 +128,23 @@ async def create_dossier(
         if acte_id is not None and rdv.acte_id not in (None, acte_id):
             raise ValueError("L’acte du rendez-vous ne correspond pas au dossier")
 
-    statut_clinique = str(data.get("statut_clinique") or "cloture")
-    if statut_clinique not in {"brouillon", "cloture"}:
-        raise ValueError("Statut clinique invalide")
-    if statut_clinique == "cloture":
-        if acte_id is None:
-            raise ValueError("Un acte est requis pour clôturer le dossier médical")
-        has_consent = await verify_consent(patient_id, acte_id, db, clinic_id=clinic_id)
-        if not has_consent:
-            raise ValueError("Consentement non signé ou expiré pour cet acte")
+    episode_id = data.get("episode_id")
+    if episode_id is None and rdv_id is not None:
+        episode_id = await db.scalar(
+            select(EpisodePatient.id).where(
+                EpisodePatient.rdv_origine_id == rdv_id,
+                EpisodePatient.patient_id == patient_id,
+                EpisodePatient.clinic_id == clinic_id,
+                EpisodePatient.statut.notin_(["cloture", "annule"]),
+            ).order_by(EpisodePatient.id.desc()).limit(1)
+        )
+
+    # Un brouillon d’accueil peut être préparé avant la signature du
+    # consentement. La validation/clôture médicale reste conditionnée à ce
+    # consentement et ne doit jamais être déduite de la simple sauvegarde.
+    has_consent = await verify_consent(patient_id, acte_id, db, clinic_id=clinic_id)
+    if not draft and not has_consent:
+        raise ValueError("Consentement non signé ou expiré pour cet acte")
 
     # Chiffrer observations
     observations = data.get("observations", "")
@@ -146,6 +155,7 @@ async def create_dossier(
         patient_id=patient_id,
         praticien_id=praticien_id,
         rdv_id=rdv_id,
+        episode_id=episode_id,
         acte_id=acte_id,
         date_acte=data.get("date_acte", datetime.utcnow()),
         zones_traitees=data.get("zones_traitees"),
@@ -156,15 +166,21 @@ async def create_dossier(
         suivi_requis=data.get("suivi_requis", False),
         date_suivi_recommandee=data.get("date_suivi_recommandee"),
         actes_details=data.get("actes_details", []),
-        statut_clinique=statut_clinique,
-        statut_facturation="brouillon" if statut_clinique == "brouillon" else "en_attente",
+        statut_clinique="brouillon" if draft else "cloture",
+        statut_facturation="en_attente",
     )
     db.add(dossier)
     await db.flush()
 
-    if statut_clinique == "cloture":
-        await _reconcile_dossier_facture(db, dossier, clinic_id)
-        await _ensure_post_acte_followup(db, dossier, praticien_id, clinic_id)
+    # Réconcilier une facture manuelle créée avant le dossier médical.
+    # Le service ne rattache qu’une correspondance unique patient + acte,
+    # et ignore les factures annulées.
+    from services.factures import find_active_facture_for_dossier
+    existing_facture = await find_active_facture_for_dossier(db, dossier, clinic_id)
+    if existing_facture:
+        dossier.statut_facturation = "facture"
+        existing_facture.dossier_id = dossier.id
+        await db.flush()
 
     # Log audit
     await log_access(
@@ -180,78 +196,6 @@ async def create_dossier(
         details={"acte_id": acte_id, "rdv_id": rdv_id},
     )
 
-    return dossier
-
-
-async def _reconcile_dossier_facture(db: AsyncSession, dossier: DossierMedical, clinic_id: int) -> None:
-    """Rattache une facture existante uniquement lorsqu’un dossier est clôturé."""
-    from services.factures import find_active_facture_for_dossier
-    existing_facture = await find_active_facture_for_dossier(db, dossier, clinic_id)
-    if existing_facture:
-        dossier.statut_facturation = "facture"
-        existing_facture.dossier_id = dossier.id
-        await db.flush()
-
-
-async def _ensure_post_acte_followup(
-    db: AsyncSession, dossier: DossierMedical, praticien_id: int, clinic_id: int,
-) -> None:
-    """Crée au plus un suivi persistant quand le praticien a demandé un contrôle."""
-    if not dossier.suivi_requis or not dossier.date_suivi_recommandee:
-        return
-    existing = await db.scalar(select(SuiviPostActe).where(
-        SuiviPostActe.clinic_id == clinic_id,
-        SuiviPostActe.dossier_id == dossier.id,
-        SuiviPostActe.type_suivi == "controle_post_acte",
-        SuiviPostActe.statut.in_(["a_faire", "en_cours"]),
-    ))
-    if existing:
-        return
-    db.add(SuiviPostActe(
-        clinic_id=clinic_id,
-        patient_id=dossier.patient_id,
-        dossier_id=dossier.id,
-        type_suivi="controle_post_acte",
-        echeance_at=datetime.combine(dossier.date_suivi_recommandee, time.min),
-        assigne_a_id=praticien_id,
-        notes="Suivi post-acte créé depuis le dossier clinique clôturé.",
-        created_by=praticien_id,
-    ))
-    await db.flush()
-
-
-async def close_dossier(
-    *, patient_id: int, dossier_id: int, praticien_id: int, db: AsyncSession,
-    clinic_id: int | None = None, ip_address: Optional[str] = None, user_agent: Optional[str] = None,
-) -> DossierMedical:
-    """Clôture un brouillon de son praticien après consentement spécifique."""
-    clinic_id = _resolve_clinic(clinic_id)
-    dossier = await db.scalar(select(DossierMedical).where(
-        DossierMedical.id == dossier_id,
-        DossierMedical.patient_id == patient_id,
-        DossierMedical.praticien_id == praticien_id,
-        DossierMedical.clinic_id == clinic_id,
-    ))
-    if not dossier:
-        raise ValueError("Brouillon introuvable ou non attribué au praticien connecté")
-    if dossier.statut_clinique == "cloture":
-        return dossier
-    if dossier.acte_id is None:
-        raise ValueError("Sélectionnez un acte avant de clôturer le dossier")
-    if not await verify_consent(patient_id, dossier.acte_id, db, clinic_id=clinic_id):
-        raise ValueError("Consentement non signé ou expiré pour cet acte")
-
-    dossier.statut_clinique = "cloture"
-    dossier.statut_facturation = "en_attente"
-    await _reconcile_dossier_facture(db, dossier, clinic_id)
-    await _ensure_post_acte_followup(db, dossier, praticien_id, clinic_id)
-    await log_access(
-        db=db, utilisateur_id=praticien_id, patient_id=patient_id,
-        action="CLOSE_DOSSIER", resource_type="dossier", resource_id=dossier.id,
-        ip_address=ip_address, user_agent=user_agent, clinic_id=clinic_id,
-        details={"acte_id": dossier.acte_id},
-    )
-    await db.flush()
     return dossier
 
 
@@ -324,8 +268,11 @@ async def get_timeline_patient(
         )
         facture = facture_result.scalar_one_or_none()
 
-        # Déchiffrer observations (SAUF pour DIRECTRICE)
-        if user_role == "directrice":
+        # Les observations et effets secondaires sont des données médicales :
+        # directrice et esthéticienne voient uniquement les champs esthétiques
+        # utiles à leur rôle, jamais le contenu clinique sensible.
+        sensitive_fields_hidden = user_role in {"directrice", "estheticienne"}
+        if sensitive_fields_hidden:
             observations = "[ACCÈS MÉDICAL RÉSERVÉ]"
         else:
             observations = decrypt_field(dossier.observations_enc) if dossier.observations_enc else ""
@@ -338,13 +285,15 @@ async def get_timeline_patient(
             "observations": observations,
             "zones_traitees": dossier.zones_traitees,
             "produits_utilises": produits,
-            "effets_secondaires": dossier.effets_secondaires if user_role != "directrice" else "[ACCÈS RÉSERVÉ]",
+            "effets_secondaires": (
+                dossier.effets_secondaires
+                if not sensitive_fields_hidden else "[ACCÈS RÉSERVÉ]"
+            ),
             "satisfaction": dossier.satisfaction_patient,
             "statut_facturation": dossier.statut_facturation,
             "facture_id": facture.id if facture else None,
             "facture_numero": facture.numero_facture if facture else None,
             "facture_statut": facture.statut if facture else None,
-            "statut_clinique": dossier.statut_clinique,
             "photos": photos if user_role != "directrice" else [],
         })
 

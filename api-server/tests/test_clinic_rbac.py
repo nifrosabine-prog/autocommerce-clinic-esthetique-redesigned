@@ -45,9 +45,13 @@ def test_medecin_full_access_to_dossiers():
     assert check_permission("medecin", "dossiers_medicaux", "delete") is False
 
 
-def test_admin_has_delete_everywhere_defined():
-    for resource in ("patients", "dossiers_medicaux", "photos", "stock_injectables"):
+def test_admin_delete_only_on_non_medical_resources():
+    """Bloc 2 : l'admin technique ne dispose pas de droits de suppression
+    sur les données médicales (dossiers en lecture auditée, photos interdites)."""
+    for resource in ("patients", "stock_injectables"):
         assert check_permission("admin", resource, "delete") is True
+    assert check_permission("admin", "dossiers_medicaux", "delete") is False
+    assert check_permission("admin", "photos", "delete") is False
 
 
 def test_commercial_read_only_on_patients():

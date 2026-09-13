@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import {
   authApi,
@@ -35,10 +35,6 @@ function Probe() {
 const renderProvider = () => render(<AuthProvider><Probe /></AuthProvider>);
 
 describe("AuthProvider — session et MFA", () => {
-  beforeEach(() => {
-    vi.spyOn(authApi, "refresh").mockRejectedValue(new Error("anonymous session"));
-  });
-
   afterEach(() => {
     clearTokens();
     vi.restoreAllMocks();

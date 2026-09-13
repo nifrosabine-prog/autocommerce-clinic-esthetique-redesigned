@@ -22,6 +22,7 @@ from services.notification_equipe import (
     marquer_lu,
     supprimer_message,
     compter_non_lus,
+    envoyer_messages,
 )
 
 router = APIRouter(prefix="/equipe", tags=["equipe"])
@@ -37,8 +38,10 @@ ROLES_EQUIPE = (
 
 
 class MessageCreate(BaseModel):
-    """Payload pour envoyer un message."""
-    destinataire_id: int
+    """Payload mono ou multi-destinataire (compatibilité legacy incluse)."""
+    destinataire_id: Optional[int] = None
+    destinataire_ids: Optional[list[int]] = None
+    idempotency_key: Optional[str] = None
     sujet: str
     contenu: str
 
@@ -112,25 +115,35 @@ async def envoyer_message_route(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role(*ROLES_EQUIPE)),
 ):
-    """Envoyer un message interne à un membre de l'équipe."""
+    """Envoyer un message interne à un ou plusieurs membres de l'équipe."""
     try:
-        msg = await envoyer_message(
+        recipient_ids = payload.destinataire_ids or ([payload.destinataire_id] if payload.destinataire_id is not None else [])
+        messages = await envoyer_messages(
             db=db,
             expediteur_id=current_user["id"],
-            destinataire_id=payload.destinataire_id,
+            destinataire_ids=recipient_ids,
             sujet=payload.sujet,
             contenu=payload.contenu,
             clinic_id=current_user["clinic_id"],
+            idempotency_key=payload.idempotency_key,
         )
-        # On recharge pour avoir les noms des utilisateurs
+        # Le premier objet conserve le contrat legacy ; les métadonnées indiquent
+        # explicitement l’ensemble créé pour le nouveau contrat multi-destinataire.
         from models.database import Utilisateur
         from sqlalchemy import select
-        exp_result = await db.execute(select(Utilisateur).where(Utilisateur.id == msg.expediteur_id))
+        exp_result = await db.execute(select(Utilisateur).where(Utilisateur.id == messages[0].expediteur_id))
         exp = exp_result.scalar_one_or_none()
-        dest_result = await db.execute(select(Utilisateur).where(Utilisateur.id == msg.destinataire_id))
-        dest = dest_result.scalar_one_or_none()
-        return _serialize_message(msg, exp.nom if exp else "", exp.prenom if exp else "",
-                                  dest.nom if dest else "", dest.prenom if dest else "")
+        dest_result = await db.execute(select(Utilisateur).where(Utilisateur.id.in_([msg.destinataire_id for msg in messages])))
+        destinations = {user.id: user for user in dest_result.scalars().all()}
+        first = messages[0]
+        first_payload = _serialize_message(
+            first,
+            exp.nom if exp else "", exp.prenom if exp else "",
+            destinations.get(first.destinataire_id).nom if destinations.get(first.destinataire_id) else "",
+            destinations.get(first.destinataire_id).prenom if destinations.get(first.destinataire_id) else "",
+        )
+        first_payload.update({"message_ids": [msg.id for msg in messages], "destinataire_ids": [msg.destinataire_id for msg in messages]})
+        return first_payload
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

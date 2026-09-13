@@ -5,24 +5,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { api, BrandingResponse, EmailDeliverySettings, settingsApi } from '@/lib/api';
+import { api, BrandingResponse, settingsApi } from '@/lib/api';
 import { useBranding } from '@/contexts/BrandingContext';
+import { useLocation } from 'wouter';
 import { Spinner } from '@/components/ui/spinner';
-import { Upload } from 'lucide-react';
+import { ClipboardList, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const { branding, applyTheme } = useBranding();
+  const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<BrandingResponse>>({});
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [heroFile, setHeroFile] = useState<File | null>(null);
   const [currency, setCurrency] = useState({ currency_code: 'TND', currency_symbol: 'DT' });
-  const [emailDelivery, setEmailDelivery] = useState<EmailDeliverySettings>({
-    provider: 'resend', sending_domain: '', from_email: '', byok_secret_configured: false,
-    email_channel_allowed: false, ready: false, secret_storage: 'deployment_secret_only',
-  });
 
   useEffect(() => {
     if (branding) {
@@ -34,7 +32,6 @@ export default function SettingsPage() {
       });
     }
     loadCurrency();
-    loadEmailDelivery();
   }, [branding]);
 
   const loadCurrency = async () => {
@@ -43,15 +40,6 @@ export default function SettingsPage() {
       setCurrency(res.data);
     } catch (err) {
       console.error('Erreur lors du chargement de la devise');
-    }
-  };
-
-  const loadEmailDelivery = async () => {
-    try {
-      const res = await settingsApi.getEmailDelivery();
-      setEmailDelivery(res.data);
-    } catch {
-      // L'absence d'identité e-mail ne bloque pas le paramétrage du branding.
     }
   };
 
@@ -87,29 +75,31 @@ export default function SettingsPage() {
   const handleSave = async () => {
     try {
       setIsSaving(true);
+
+      // Update currency
       await api.put('/settings/currency', currency);
+
+      // Update branding settings
       const response = await settingsApi.updateBranding(formData);
       applyTheme(response.data);
+      toast.success('Paramètres sauvegardés');
+
+      // Upload logo if selected
       if (logoFile) {
-        await settingsApi.uploadLogo(logoFile);
-        setLogoFile(null);
-      }
-      if (heroFile) {
+        try {
+          await settingsApi.uploadLogo(logoFile);
+          toast.success('Logo téléchargé');
+          setLogoFile(null);
+          if (heroFile) {
         await settingsApi.uploadHero(heroFile);
+        toast.success('Photo de présentation téléchargée');
         setHeroFile(null);
       }
-      if (emailDelivery.sending_domain || emailDelivery.from_email) {
-        if (!emailDelivery.sending_domain || !emailDelivery.from_email) {
-          throw new Error('Renseignez le domaine et l’adresse expéditrice BYOK ensemble.');
+    } catch (err: any) {
+          const message = err.response?.data?.detail || 'Erreur lors du téléchargement du logo';
+          toast.error(message);
         }
-        const emailResponse = await settingsApi.updateEmailDelivery({
-          provider: 'resend',
-          sending_domain: emailDelivery.sending_domain,
-          from_email: emailDelivery.from_email,
-        });
-        setEmailDelivery(emailResponse.data);
       }
-      toast.success('Paramètres sauvegardés');
     } catch (err: any) {
       const message = err.response?.data?.detail || 'Erreur lors de la sauvegarde';
       toast.error(message);
@@ -135,6 +125,23 @@ export default function SettingsPage() {
           <h1 className="text-3xl font-bold">Paramètres</h1>
           <p className="text-muted-foreground mt-1">Configuration du branding et de la clinique</p>
         </div>
+
+        <Card className="border-blue-200 bg-blue-50/60">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                <ClipboardList className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-blue-950">Configuration des actes médicaux</h2>
+                <p className="mt-1 text-sm text-blue-900/75">Gérez le catalogue des soins, les durées et les tarifs utilisés pour les rendez-vous et la facturation.</p>
+              </div>
+            </div>
+            <Button type="button" onClick={() => setLocation('/settings/actes')} className="shrink-0">
+              Gérer les actes
+            </Button>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -165,31 +172,9 @@ export default function SettingsPage() {
                     onChange={handleLogoChange}
                     className="cursor-pointer"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG (max 2 Mo). Ce logo est automatiquement repris dans l’en-tête des aperçus et contrats PDF.</p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG (max 2 Mo)</p>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Envoi e-mail BYOK</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">Configurez l’identité e-mail de la clinique finale. La clé Resend reste un secret de déploiement et n’est jamais saisie ni affichée dans cette page.</p>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label htmlFor="sending_domain">Domaine d’envoi vérifié</Label>
-                <Input id="sending_domain" value={emailDelivery.sending_domain} onChange={(event) => setEmailDelivery({ ...emailDelivery, sending_domain: event.target.value })} placeholder="clinique-exemple.tld" />
-              </div>
-              <div>
-                <Label htmlFor="from_email">Adresse expéditrice</Label>
-                <Input id="from_email" type="email" value={emailDelivery.from_email} onChange={(event) => setEmailDelivery({ ...emailDelivery, from_email: event.target.value })} placeholder="contrats@clinique-exemple.tld" />
-              </div>
-            </div>
-            <div className={`rounded-lg border p-3 text-sm ${emailDelivery.ready ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
-              {emailDelivery.ready ? 'Canal e-mail BYOK prêt : les contrats signés pourront être envoyés après confirmation.' : 'Canal e-mail non prêt : enregistrez l’identité ci-dessus puis ajoutez une clé Resend et autorisez le canal e-mail dans la configuration de déploiement.'}
             </div>
           </CardContent>
         </Card>
@@ -219,7 +204,14 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Cette devise sera appliquée sur toute la plateforme (tarifs, factures, rapports).</p>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">Important — historique financier</p>
+              <p className="mt-1 text-amber-900/80">
+                Le changement de devise s’applique uniquement aux nouvelles opérations. Les factures existantes conservent leur montant,
+                leur devise, leur TVA et leur historique d’origine. Aucune conversion automatique n’est effectuée.
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">Cette devise sera utilisée pour les nouveaux actes, nouvelles factures et nouveaux rapports.</p>
           </CardContent>
         </Card>
 

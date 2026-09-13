@@ -9,7 +9,7 @@ patientes", et l'anonymisation RGPD (droit à l'oubli).
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import select, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.database import Patient, Utilisateur, RoleEnum
@@ -24,8 +24,26 @@ def _normalized_role(current_user: Optional[dict]) -> str:
     return str((current_user or {}).get("role", "")).replace("RoleEnum.", "").lower()
 
 
+# Caractères courants de mise en forme d'un numéro de téléphone, retirés
+# avant comparaison (expression portable SQLite / PostgreSQL : func.replace).
+_PHONE_FORMAT_CHARS = (" ", ".", "-", "(", ")", "+")
+
+
+def digits_only_phone(column):
+    """Expression SQL du numéro réduit à ses chiffres seuls
+    (« +216 20 000 000 » stocké → « 21620000000 ») : la recherche téléphone
+    devient insensible au format de saisie ET au format de stockage.
+    Partagée avec l'export CSV (api/v1/patients.py) pour une recherche
+    homogène nom / téléphone sur toutes les surfaces patients."""
+    expr = column
+    for char in _PHONE_FORMAT_CHARS:
+        expr = func.replace(expr, char, "")
+    return expr
+
+
 def _apply_encrypted_input(patient: Patient, data: dict, current_user: Optional[dict] = None) -> None:
-    if any(field in data for field in ENCRYPTED_FIELDS) and _normalized_role(current_user) not in MEDICAL_WRITE_ROLES:
+    provided_encrypted_fields = [field for field in ENCRYPTED_FIELDS if data.get(field) is not None]
+    if provided_encrypted_fields and _normalized_role(current_user) not in MEDICAL_WRITE_ROLES:
         raise PermissionError("Seuls les rôles cliniques peuvent modifier les données médicales")
     for field in ENCRYPTED_FIELDS:
         if field in data and data[field] is not None:
@@ -40,6 +58,7 @@ def _serialize(patient: Patient, include_sensitive: bool = True, include_anteced
         "date_naissance": patient.date_naissance,
         "genre": patient.genre,
         "telephone": patient.telephone,
+        "whatsapp_phone": patient.whatsapp_phone,
         "email": patient.email,
         "adresse": patient.adresse,
         "ville": patient.ville,
@@ -137,9 +156,32 @@ async def list_patients(current_user: dict, db: AsyncSession, search: Optional[s
     if current_user.get("role") == "commercial":
         query = query.where(Patient.commercial_id == current_user.get("id"))
 
+    # Correctif 2026-09-11 (audit AUD-002 suite) : la recherche par nom /
+    # prénom / téléphone est garantie pour TOUS les rôles autorisés (le seul
+    # périmètre réduit reste celui du commercial, limité à ses propres
+    # patientes). whatsapp_phone est inclus : une patiente est parfois
+    # retrouvée via son numéro WhatsApp plutôt que son téléphone principal.
     if search:
         like = f"%{search}%"
-        query = query.where(or_(Patient.nom.ilike(like), Patient.prenom.ilike(like), Patient.telephone.ilike(like)))
+        conditions = [
+            Patient.nom.ilike(like),
+            Patient.prenom.ilike(like),
+            Patient.telephone.ilike(like),
+            Patient.whatsapp_phone.ilike(like),
+        ]
+        # Correctif 2026-09-11 (recette « recherche tous rôles ») : le
+        # téléphone est aussi comparé en chiffres seuls, côté serveur, pour
+        # que « 20 000 000 », « +21620000000 » et « 20000000 » retrouvent la
+        # même patiente quel que soit le format stocké. Aucun périmètre
+        # n'est élargi : le scoping clinic_id / commercial s'applique AVANT.
+        digits = "".join(char for char in search if char.isdigit())
+        if digits:
+            digits_like = f"%{digits}%"
+            conditions.extend(
+                digits_only_phone(column).ilike(digits_like)
+                for column in (Patient.telephone, Patient.whatsapp_phone)
+            )
+        query = query.where(or_(*conditions))
 
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)

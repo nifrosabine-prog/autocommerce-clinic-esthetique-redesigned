@@ -75,6 +75,10 @@ celery.conf.update(
             "task": "services.celery_app.injection_reminder_task",
             "schedule": crontab(hour=9, minute=30),
         },
+        "publish-scheduled-social-posts": {
+            "task": "services.celery_app.publish_scheduled_social_posts_task",
+            "schedule": crontab(minute="*/5"),
+        },
     },
 )
 
@@ -294,5 +298,38 @@ def injection_reminder_task():
             for (clinic_id,) in rows.all():
                 await process_injection_reminders(db, clinic_id=clinic_id)
             await db.commit()
+
+    asyncio.run(run())
+
+
+@celery.task
+def publish_scheduled_social_posts_task():
+    """Publie uniquement les posts explicitement planifiés par un utilisateur."""
+    import asyncio
+    from datetime import datetime
+    from sqlalchemy import select
+    from models.database import SocialPost, Utilisateur
+    from models.database import get_async_engine, get_async_sessionmaker
+    from services.social_crm import publier_post
+
+    async def run():
+        engine = get_async_engine(settings.database_url)
+        session_factory = get_async_sessionmaker(engine)
+        async with session_factory() as db:
+            clinics = await db.execute(select(Utilisateur.clinic_id).where(Utilisateur.is_active.is_(True)).distinct())
+            for (clinic_id,) in clinics.all():
+                posts = (await db.execute(select(SocialPost).where(
+                    SocialPost.clinic_id == clinic_id,
+                    SocialPost.statut == "planifie",
+                    SocialPost.date_publication_prevue <= datetime.utcnow(),
+                ).with_for_update(skip_locked=True))).scalars().all()
+                for post in posts:
+                    try:
+                        await publier_post(post.id, db, clinic_id=clinic_id)
+                    except Exception as exc:
+                        post.statut = "echec"
+                        post.erreur = str(exc)[:300]
+            await db.commit()
+        await engine.dispose()
 
     asyncio.run(run())

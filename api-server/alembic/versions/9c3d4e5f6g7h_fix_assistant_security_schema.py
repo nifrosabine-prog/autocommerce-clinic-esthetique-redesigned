@@ -36,9 +36,15 @@ def upgrade():
     op.create_index('ix_commande_outil', 'commandes_assistant', ['outil_appele'], unique=False)
 
 
+def _drop_index_if_exists(name: str, table_name: str) -> None:
+    inspector = sa.inspect(op.get_bind())
+    if any(index["name"] == name for index in inspector.get_indexes(table_name)):
+        op.drop_index(name, table_name=table_name)
+
+
 def downgrade():
-    op.drop_index('ix_commande_outil', table_name='commandes_assistant')
-    op.drop_index('ix_commande_utilisateur', table_name='commandes_assistant')
+    _drop_index_if_exists('ix_commande_outil', 'commandes_assistant')
+    _drop_index_if_exists('ix_commande_utilisateur', 'commandes_assistant')
     op.drop_column('commandes_assistant', 'utilisateur_id')
     op.drop_column('commandes_assistant', 'erreur_message')
     op.drop_column('commandes_assistant', 'tool_payload_json')

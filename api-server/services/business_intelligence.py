@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import (
     Facture, StatutFacture, RendezVous, Patient, Utilisateur, ActeMedical,
 )
+from services.clinic_settings import get_setting
 
 from core.llm_client import LLMClient, LLMUnavailable, get_llm_client, pseudonymize_pii
 from core.prompt_templates import BI_INSIGHTS
@@ -67,6 +68,10 @@ class BusinessIntelligenceService:
             ))
         )).scalar() or 0
         revenue_f = float(revenue)
+
+        clinic_currency = await get_setting("clinic.currency", session, clinic_id=clinic_id) or {
+            "currency_code": "TND", "currency_symbol": "DT"
+        }
 
         # ── Breakdowns (SQLite + PostgreSQL compatible — Python-side aggregation) ──
         from collections import defaultdict
@@ -136,7 +141,9 @@ class BusinessIntelligenceService:
             "total_revenue": revenue_f,
             "total_invoices": int(count),
             "avg_invoice": round(revenue_f / max(int(count), 1), 2),
-            "currency": "EUR",
+            "currency": clinic_currency.get("currency_code", "TND"),
+            "currency_code": clinic_currency.get("currency_code", "TND"),
+            "currency_symbol": clinic_currency.get("currency_symbol", "DT"),
             "revenue_by_day": revenue_by_day,
             "revenue_by_acte": revenue_by_acte,
             "revenue_by_practitioner": revenue_by_practitioner,

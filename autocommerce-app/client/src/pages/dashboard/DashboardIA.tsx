@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/hooks/useCurrency';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
 import {
@@ -30,6 +31,7 @@ interface DashboardIAData {
 
 export default function DashboardIA() {
   const { user } = useAuth();
+  const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardIAData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +125,7 @@ export default function DashboardIA() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <div className="text-3xl font-bold">{daily_summary?.revenue_today?.toFixed(2) || 0} DT</div>
+                <div className="text-3xl font-bold">{daily_summary?.revenue_today?.toFixed(2) || 0} {currency.currency_symbol}</div>
                 <DollarSign className="w-8 h-8 text-green-500 opacity-50" />
               </div>
               <p className="text-xs text-gray-500 mt-2">
@@ -277,7 +279,7 @@ export default function DashboardIA() {
                     <div key={item.rdv_id} className="flex items-center justify-between rounded-lg bg-white p-3">
                       <div>
                         <p className="font-medium">{item.patient || `Patient #${item.patient_id}`}</p>
-                        <p className="text-xs text-gray-600">{new Date(item.date_heure).toLocaleString()} — {item.praticien || 'Praticien'}</p>
+                        <p className="text-xs text-gray-600">{new Date(item.date_heure).toLocaleString()} — {item.praticien || 'Médecin'}</p>
                       </div>
                       <span className={`rounded px-2 py-1 text-xs font-semibold ${item.risk_level === 'high' ? 'bg-red-100 text-red-700' : item.risk_level === 'medium' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
                         {(item.risk_score * 100).toFixed(1)} %
@@ -290,13 +292,13 @@ export default function DashboardIA() {
           </Card>
         )}
 
-        {/* Performance des praticiens */}
+        {/* Performance des médecins */}
         {practitioner_performance?.practitioners && practitioner_performance.practitioners.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Performance des praticiens
+                Performance des médecins
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -314,7 +316,7 @@ export default function DashboardIA() {
                       </div>
                       <div>
                         <p className="text-gray-600">Revenus</p>
-                        <p className="font-bold">{practitioner.revenue.toFixed(2)} DT</p>
+                        <p className="font-bold">{practitioner.revenue.toFixed(2)} {currency.currency_symbol}</p>
                       </div>
                       <div>
                         <p className="text-gray-600">Satisfaction</p>
@@ -351,7 +353,7 @@ export default function DashboardIA() {
                       }`}>
                         {patient.niveau.toUpperCase()}
                       </span>
-                      <p className="text-xs text-gray-600 mt-1">{patient.total_ca.toFixed(2)} DT</p>
+                      <p className="text-xs text-gray-600 mt-1">{patient.total_ca.toFixed(2)} {currency.currency_symbol}</p>
                     </div>
                   </div>
                 ))}

@@ -22,6 +22,7 @@ export interface Patient {
   nom: string;
   prenom: string;
   telephone: string;
+  whatsapp_phone?: string;
   email?: string;
   date_naissance?: string;
   genre?: string;

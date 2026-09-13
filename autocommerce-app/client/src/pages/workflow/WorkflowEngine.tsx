@@ -59,28 +59,6 @@ interface WorkflowStats {
   success_rate: number;
 }
 
-interface WorkflowTriggerPreset {
-  key: string;
-  triggerType: string;
-  eventType: string;
-  label: string;
-  description: string;
-}
-
-interface WorkflowActionType {
-  value: string;
-  label: string;
-  description: string;
-  tone: string;
-}
-
-interface WorkflowCatalog {
-  triggers: WorkflowTriggerPreset[];
-  actions: WorkflowActionType[];
-  patient_segments?: { value: string; label: string }[];
-  appointment_scopes?: { value: string; label: string }[];
-}
-
 interface WorkflowExecution {
   id: number;
   status: string;
@@ -99,111 +77,59 @@ interface WorkflowActionLog {
   executed_at?: string | null;
 }
 
-interface TeamMember {
-  id: number;
-  nom: string;
-  prenom: string;
-  role: string;
-  is_active: boolean;
-}
-
 interface WorkflowFormValue {
   nom: string;
   description: string;
-  trigger_key: string;
-  delay_days: number;
-  only_active_patients: boolean;
-  exclude_opted_out: boolean;
-  patient_segment: 'all' | 'new' | 'returning' | 'vip';
-  appointment_scope: 'any' | 'confirmed' | 'completed';
-  actions: VisualActionDraft[];
+  trigger_type: string;
+  trigger_config_text: string;
+  conditions_text: string;
+  actions: ActionDraft[];
+  simple_delay: string;
+  simple_delay_unit: 'heures' | 'jours';
+  simple_message: string;
+  require_approval: boolean;
+  advanced_mode: boolean;
 }
 
-interface VisualActionDraft {
+interface ActionDraft {
   type: string;
-  recipient: 'patient' | 'equipe';
-  assignee_id: number | null;
-  assignee_role: string | null;
-  message: string;
-  task_title: string;
-  priority: 'low' | 'medium' | 'high';
-  delay_days: number;
-  points: number;
-  reason: string;
+  config_text: string;
 }
 
-const TRIGGER_PRESETS = [
-  { key: 'manual', triggerType: 'manual', eventType: 'manual', label: 'À la demande', description: 'Le membre de l’équipe lance le scénario lorsqu’il le décide.' },
-  { key: 'after_act', triggerType: 'event_based', eventType: 'appointment_completed', label: 'Après un acte', description: 'À la fin d’un rendez-vous ou d’un acte enregistré.' },
-  { key: 'after_injection', triggerType: 'event_based', eventType: 'injection_completed', label: 'Après une injection', description: 'Pour organiser un contrôle ou un suivi spécifique.' },
-  { key: 'after_treatment', triggerType: 'event_based', eventType: 'aesthetic_treatment_completed', label: 'Après un traitement esthétique', description: 'Pour préparer un suivi à distance.' },
-  { key: 'callback_request', triggerType: 'event_based', eventType: 'callback_requested', label: 'Quand un rappel est demandé', description: 'Pour ne laisser aucune demande de rappel sans suite.' },
-  { key: 'pending_consent', triggerType: 'event_based', eventType: 'consent_pending', label: 'Quand un consentement manque', description: 'Pour préparer le rappel de signature avant un acte.' },
-  { key: 'inactive_patient', triggerType: 'condition_based', eventType: 'patient_inactive', label: 'Patient inactif', description: 'Après une période sans visite, définie ci-dessous.' },
-  { key: 'unaccepted_quote', triggerType: 'condition_based', eventType: 'quote_not_accepted', label: 'Devis non accepté', description: 'Après un délai de relance défini ci-dessous.' },
-  { key: 'monthly', triggerType: 'scheduled', eventType: 'monthly', label: 'Chaque mois', description: 'Pour une revue ou une campagne planifiée.' },
-  { key: 'birthday', triggerType: 'scheduled', eventType: 'birthday', label: 'Anniversaire patient', description: 'Le jour de l’anniversaire du patient.' },
+const TRIGGER_TYPES = [
+  { value: 'manual', label: 'Manuel' },
+  { value: 'event_based', label: 'Événement clinique' },
+  { value: 'condition_based', label: 'Condition patient' },
+  { value: 'scheduled', label: 'Planifié' },
 ];
 
 const ACTION_TYPES = [
-  { value: 'create_task', label: 'Créer une tâche interne', description: 'Visible dans la file de l’équipe.', tone: 'teal' },
-  { value: 'send_whatsapp', label: 'Préparer un WhatsApp', description: 'Toujours soumis à validation humaine avant envoi.', tone: 'amber' },
-  { value: 'send_sms', label: 'Préparer un SMS', description: 'Toujours soumis à validation humaine avant envoi.', tone: 'amber' },
-  { value: 'send_email', label: 'Préparer un e-mail', description: 'Toujours soumis à validation humaine avant envoi.', tone: 'amber' },
-  { value: 'add_fidelite_points', label: 'Ajouter des points fidélité', description: 'Valorise un suivi ou une campagne définie.', tone: 'violet' },
-  { value: 'launch_campaign', label: 'Préparer une campagne', description: 'Prépare une campagne à vérifier avant diffusion.', tone: 'violet' },
+  { value: 'send_whatsapp', label: 'Préparer un WhatsApp' },
+  { value: 'send_sms', label: 'Préparer un SMS' },
+  { value: 'send_email', label: 'Préparer un e-mail' },
+  { value: 'create_task', label: 'Créer une tâche interne' },
+  { value: 'create_appointment', label: 'Créer un rendez-vous' },
+  { value: 'add_fidelite_points', label: 'Ajouter des points fidélité' },
+  { value: 'launch_campaign', label: 'Lancer une campagne' },
 ];
 
-const ASSIGNMENT_ROLE_OPTIONS = [
-  { value: 'assistante', label: 'Équipe d’assistance' },
-  { value: 'medecin', label: 'Praticien médecin' },
-  { value: 'estheticienne', label: 'Praticien esthétique' },
-  { value: 'directrice', label: 'Direction clinique' },
-];
-
-const PATIENT_SEGMENT_OPTIONS = [
-  { value: 'all', label: 'Tous les patients éligibles' },
-  { value: 'new', label: 'Nouveaux patients' },
-  { value: 'returning', label: 'Patients déjà suivis' },
-  { value: 'vip', label: 'Patients VIP / fidélité élevée' },
-] as const;
-
-const APPOINTMENT_SCOPE_OPTIONS = [
-  { value: 'any', label: 'Tout contexte de rendez-vous' },
-  { value: 'confirmed', label: 'Rendez-vous confirmé' },
-  { value: 'completed', label: 'Acte ou rendez-vous réalisé' },
-] as const;
-
-const DEFAULT_WORKFLOW_CATALOG: WorkflowCatalog = {
-  triggers: TRIGGER_PRESETS,
-  actions: ACTION_TYPES,
-  patient_segments: [...PATIENT_SEGMENT_OPTIONS],
-  appointment_scopes: [...APPOINTMENT_SCOPE_OPTIONS],
-};
-
-const DEFAULT_ACTION: VisualActionDraft = {
-  type: 'create_task',
-  recipient: 'equipe',
-  assignee_id: null,
-  assignee_role: null,
-  message: '',
-  task_title: 'Contacter le patient',
-  priority: 'medium',
-  delay_days: 0,
-  points: 0,
-  reason: '',
+const DEFAULT_ACTION: ActionDraft = {
+  type: 'send_whatsapp',
+  config_text: '{\n  "template": "Message de suivi"\n}',
 };
 
 const EMPTY_FORM: WorkflowFormValue = {
   nom: '',
   description: '',
-  trigger_key: 'after_act',
-  delay_days: 1,
-  only_active_patients: true,
-  exclude_opted_out: true,
-  patient_segment: 'all',
-  appointment_scope: 'any',
+  trigger_type: 'manual',
+  trigger_config_text: '',
+  conditions_text: '',
   actions: [{ ...DEFAULT_ACTION }],
+  simple_delay: '24',
+  simple_delay_unit: 'heures',
+  simple_message: 'Bonjour {{prénom}}, nous espérons que votre soin s’est bien passé. Souhaitez-vous être rappelé par notre équipe ?',
+  require_approval: true,
+  advanced_mode: false,
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -221,71 +147,48 @@ const STATUS_LABELS: Record<string, string> = {
 const getErrorMessage = (error: any, fallback: string) =>
   error?.response?.data?.detail || error?.message || fallback;
 
+const stringifyJson = (value?: JsonObject | null) =>
+  value && Object.keys(value).length > 0 ? JSON.stringify(value, null, 2) : '';
+
 type WorkflowFormSource = Partial<Omit<Workflow, 'id'>>;
 
-const inferTriggerKey = (workflow: WorkflowFormSource) => {
-  const eventType = workflow.trigger_config?.type;
-  return TRIGGER_PRESETS.find((preset) => preset.eventType === eventType)?.key
-    || TRIGGER_PRESETS.find((preset) => preset.triggerType === workflow.trigger_type)?.key
-    || 'after_act';
-};
-
-const workflowToForm = (workflow: WorkflowFormSource, triggerPresets = TRIGGER_PRESETS): WorkflowFormValue => {
-  const config = workflow.trigger_config || {};
-  const conditions = workflow.conditions || {};
-  return {
-    nom: workflow.nom || '',
-    description: workflow.description || '',
-    trigger_key: triggerPresets.find((preset) => preset.eventType === config.type)?.key
-      || triggerPresets.find((preset) => preset.triggerType === workflow.trigger_type)?.key
-      || inferTriggerKey(workflow),
-    delay_days: Number(config.delay_days ?? config.days ?? (Math.ceil(Number(config.delay_hours || 0) / 24) || 0)),
-    only_active_patients: conditions.patient_status !== 'inactive',
-    exclude_opted_out: conditions.opted_out !== false,
-    patient_segment: ['new', 'returning', 'vip'].includes(String(conditions.patient_segment)) ? String(conditions.patient_segment) as WorkflowFormValue['patient_segment'] : 'all',
-    appointment_scope: ['confirmed', 'completed'].includes(String(conditions.appointment_status)) ? String(conditions.appointment_status) as WorkflowFormValue['appointment_scope'] : 'any',
-    actions: workflow.actions?.length ? workflow.actions.map((action) => {
-      const actionConfig = action.config || {};
-      return {
+const workflowToForm = (workflow: WorkflowFormSource): WorkflowFormValue => ({
+  nom: workflow.nom || '',
+  description: workflow.description || '',
+  trigger_type: workflow.trigger_type || 'manual',
+  trigger_config_text: stringifyJson(workflow.trigger_config),
+  conditions_text: stringifyJson(workflow.conditions),
+  actions: workflow.actions?.length
+    ? workflow.actions.map((action) => ({
         type: action.type,
-        recipient: actionConfig.recipient === 'equipe' ? 'equipe' : ['send_whatsapp', 'send_sms', 'send_email', 'add_fidelite_points'].includes(action.type) ? 'patient' : 'equipe',
-        assignee_id: typeof actionConfig.assignee_id === 'number' ? actionConfig.assignee_id : null,
-        assignee_role: typeof actionConfig.assignee_role === 'string' ? actionConfig.assignee_role : null,
-        message: String(actionConfig.message || actionConfig.template || ''),
-        task_title: String(actionConfig.title || 'Contacter le patient'),
-        priority: ['low', 'medium', 'high'].includes(String(actionConfig.priority)) ? String(actionConfig.priority) as VisualActionDraft['priority'] : 'medium',
-        delay_days: Number(actionConfig.days_from_now || 0),
-        points: Number(actionConfig.points || 0),
-        reason: String(actionConfig.reason || ''),
-      };
-    }) : [{ ...DEFAULT_ACTION }],
-  };
-};
+        config_text: stringifyJson(action.config),
+      }))
+    : [{ ...DEFAULT_ACTION }],
+  simple_delay: String((workflow.trigger_config?.delay_hours as number) || 24),
+  simple_delay_unit: 'heures',
+  simple_message: String((workflow.actions?.[0]?.config?.template as string) || 'Bonjour {{prénom}}, nous espérons que votre soin s’est bien passé. Souhaitez-vous être rappelé par notre équipe ?'),
+  require_approval: true,
+  advanced_mode: false,
+});
 
-const visualFormToPayload = (value: WorkflowFormValue, triggerPresets = TRIGGER_PRESETS) => {
-  const preset = triggerPresets.find((item) => item.key === value.trigger_key) || triggerPresets[0] || TRIGGER_PRESETS[0];
-  const triggerConfig: JsonObject = { type: preset.eventType };
-  if (['after_act', 'after_injection', 'after_treatment', 'callback_request', 'pending_consent'].includes(preset.key)) triggerConfig.delay_days = Math.max(0, value.delay_days);
-  if (['inactive_patient', 'unaccepted_quote'].includes(preset.key)) triggerConfig.days = Math.max(0, value.delay_days);
-  const conditions: JsonObject = {};
-  if (value.only_active_patients) conditions.patient_status = 'active';
-  if (value.exclude_opted_out) conditions.opted_out = false;
-  if (value.patient_segment !== 'all') conditions.patient_segment = value.patient_segment;
-  if (value.appointment_scope !== 'any') conditions.appointment_status = value.appointment_scope;
-  const actions = value.actions.map((action) => {
-    if (action.type === 'create_task') return { type: action.type, config: { title: action.task_title.trim() || 'Tâche clinique', priority: action.priority, days_from_now: Math.max(0, action.delay_days), recipient: action.recipient, assignee_id: action.assignee_id || undefined, assignee_role: action.assignee_role || undefined } };
-    if (['send_whatsapp', 'send_sms', 'send_email'].includes(action.type)) return { type: action.type, config: { template: action.message.trim() || 'message_clinique_a_valider', message: action.message.trim(), recipient: action.recipient } };
-    if (action.type === 'add_fidelite_points') return { type: action.type, config: { points: Math.max(0, action.points), reason: action.reason.trim() || 'Programme fidélité clinique', recipient: action.recipient } };
-    return { type: action.type, config: { nom: action.task_title.trim() || 'Campagne clinique', template: action.message.trim(), recipient: action.recipient } };
-  });
-  return { nom: value.nom.trim(), description: value.description.trim() || undefined, trigger_type: preset.triggerType, trigger_config: triggerConfig, conditions: Object.keys(conditions).length ? conditions : undefined, actions };
+const parseJsonObject = (value: string, fieldLabel: string): JsonObject | undefined => {
+  if (!value.trim()) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`${fieldLabel} doit contenir un JSON valide`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${fieldLabel} doit être un objet JSON`);
+  }
+  return parsed as JsonObject;
 };
 
 export default function WorkflowEngine() {
   const [isLoading, setIsLoading] = useState(true);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [stats, setStats] = useState<WorkflowStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -294,33 +197,19 @@ export default function WorkflowEngine() {
   const [editorInitialValue, setEditorInitialValue] = useState<WorkflowFormValue>(EMPTY_FORM);
   const [executionTarget, setExecutionTarget] = useState<Workflow | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Workflow | null>(null);
-  const [activationTarget, setActivationTarget] = useState<Workflow | null>(null);
-  const [workflowCatalog, setWorkflowCatalog] = useState<WorkflowCatalog>(DEFAULT_WORKFLOW_CATALOG);
 
   const loadData = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const [workflowsRes, statsRes, templatesRes, usersRes, catalogRes] = await Promise.all([
+      const [workflowsRes, statsRes, templatesRes] = await Promise.all([
         api.get('/workflows/'),
         api.get('/workflows/statistics/summary'),
         api.get('/workflows/templates'),
-        api.get('/users'),
-        api.get('/workflows/catalog'),
       ]);
       setWorkflows(Array.isArray(workflowsRes.data?.data) ? workflowsRes.data.data : []);
       setStats(statsRes.data?.data || null);
       setTemplates(Array.isArray(templatesRes.data?.data) ? templatesRes.data.data : []);
-      setTeamMembers(Array.isArray(usersRes.data) ? usersRes.data.filter((member: TeamMember) => member.is_active) : []);
-      const remoteCatalog = catalogRes.data?.data;
-      if (Array.isArray(remoteCatalog?.triggers) && Array.isArray(remoteCatalog?.actions)) {
-        setWorkflowCatalog({
-          triggers: remoteCatalog.triggers.map((item: any) => ({ key: item.key, triggerType: item.trigger_type, eventType: item.event_type, label: item.label, description: item.description })),
-          actions: remoteCatalog.actions,
-          patient_segments: remoteCatalog.patient_segments,
-          appointment_scopes: remoteCatalog.appointment_scopes,
-        });
-      }
     } catch (err: any) {
       const message = getErrorMessage(err, 'Erreur lors du chargement des workflows');
       setError(message);
@@ -337,7 +226,7 @@ export default function WorkflowEngine() {
   const openCreate = (template?: WorkflowTemplate) => {
     setEditorMode('create');
     setEditingWorkflowId(null);
-    setEditorInitialValue(template ? workflowToForm(template, workflowCatalog.triggers) : { ...EMPTY_FORM, actions: [{ ...DEFAULT_ACTION }] });
+    setEditorInitialValue(template ? workflowToForm(template) : { ...EMPTY_FORM, actions: [{ ...DEFAULT_ACTION }] });
     setEditorOpen(true);
   };
 
@@ -346,7 +235,7 @@ export default function WorkflowEngine() {
       const response = await api.get(`/workflows/${workflow.id}`);
       setEditorMode('edit');
       setEditingWorkflowId(workflow.id);
-      setEditorInitialValue(workflowToForm(response.data?.data || workflow, workflowCatalog.triggers));
+      setEditorInitialValue(workflowToForm(response.data?.data || workflow));
       setEditorOpen(true);
     } catch (err: any) {
       toast.error(getErrorMessage(err, 'Impossible de charger le workflow'));
@@ -364,12 +253,12 @@ export default function WorkflowEngine() {
     }
   };
 
-  const handleToggleWorkflow = async (workflow: Workflow, enabled = !workflow.enabled) => {
+  const handleToggleWorkflow = async (workflow: Workflow) => {
     try {
       await api.put(`/workflows/${workflow.id}`, {
-        enabled,
+        enabled: !workflow.enabled,
       });
-      toast.success(enabled ? 'Scénario activé' : 'Scénario mis en pause');
+      toast.success(workflow.enabled ? 'Workflow mis en pause' : 'Workflow activé');
       await loadData();
     } catch (err: any) {
       toast.error(getErrorMessage(err, 'Erreur lors du changement de statut'));
@@ -399,7 +288,18 @@ export default function WorkflowEngine() {
 
   const handleSaveWorkflow = async (value: WorkflowFormValue) => {
     try {
-      const payload = visualFormToPayload(value, workflowCatalog.triggers);
+      const actions = value.actions.map((action) => ({
+        type: action.type,
+        config: parseJsonObject(action.config_text, `Configuration de l’action ${action.type}`) || {},
+      }));
+      const payload = {
+        nom: value.nom.trim(),
+        description: value.description.trim() || undefined,
+        trigger_type: value.trigger_type,
+        trigger_config: parseJsonObject(value.trigger_config_text, 'Configuration du déclencheur'),
+        conditions: parseJsonObject(value.conditions_text, 'Conditions'),
+        actions,
+      };
       if (!payload.nom) throw new Error('Le nom du workflow est obligatoire');
 
       if (editorMode === 'edit') {
@@ -431,11 +331,11 @@ export default function WorkflowEngine() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-950">Scénarios et rappels cliniques</h1>
-            <p className="mt-2 text-slate-600">Composez des rappels et actions d’équipe en langage métier, avec validation et traçabilité.</p>
+            <h1 className="text-3xl font-bold text-gray-900">Moteur de Workflows</h1>
+            <p className="text-gray-600 mt-2">Automatisez les processus cliniques avec validation et traçabilité.</p>
           </div>
           <Button onClick={() => openCreate()} className="gap-2">
-            <Plus className="w-5 h-5" /> Nouveau scénario
+            <Plus className="w-5 h-5" /> Nouveau Workflow
           </Button>
         </div>
 
@@ -459,7 +359,7 @@ export default function WorkflowEngine() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {workflows.length === 0 ? (
-            <Card className="lg:col-span-2"><CardContent className="pt-12 pb-12 text-center text-gray-500">Aucun scénario créé. Commencez à partir d’un modèle clinique ou composez votre propre scénario.</CardContent></Card>
+            <Card className="lg:col-span-2"><CardContent className="pt-12 pb-12 text-center text-gray-500">Aucun workflow créé. Commencez par en créer un ou utilisez un modèle.</CardContent></Card>
           ) : workflows.map((workflow) => (
             <Card key={workflow.id} className={workflow.enabled ? '' : 'opacity-70'}>
               <CardHeader>
@@ -476,13 +376,13 @@ export default function WorkflowEngine() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div><p className="text-xs text-gray-600">Déclencheur</p><p className="text-sm font-medium">{workflowCatalog.triggers.find((item) => item.triggerType === workflow.trigger_type)?.label || workflow.trigger_type}</p></div>
+                  <div><p className="text-xs text-gray-600">Déclencheur</p><p className="text-sm font-medium">{TRIGGER_TYPES.find((item) => item.value === workflow.trigger_type)?.label || workflow.trigger_type}</p></div>
                   <div><p className="text-xs text-gray-600">Créé le</p><p className="text-sm font-medium">{new Date(workflow.created_at).toLocaleDateString('fr-FR')}</p></div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mt-4 pt-4 border-t">
                   <Button size="sm" variant="outline" onClick={() => void handleExecuteWorkflow(workflow)} className="gap-1"><Play className="w-3.5 h-3.5" /> Exécuter</Button>
                   <Button size="sm" variant="outline" onClick={() => openEdit(workflow)} className="gap-1"><Edit2 className="w-3.5 h-3.5" /> Éditer</Button>
-                  <Button size="sm" variant="outline" onClick={() => workflow.enabled ? void handleToggleWorkflow(workflow, false) : setActivationTarget(workflow)} className="gap-1"><Pause className="w-3.5 h-3.5" /> {workflow.enabled ? 'Pause' : 'Revoir puis activer'}</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleToggleWorkflow(workflow)} className="gap-1"><Pause className="w-3.5 h-3.5" /> {workflow.enabled ? 'Pause' : 'Activer'}</Button>
                   <Button size="sm" variant="outline" onClick={() => setHistoryTarget(workflow)} className="gap-1"><History className="w-3.5 h-3.5" /> Historique</Button>
                   <Button size="sm" variant="outline" onClick={() => handleDeleteWorkflow(workflow)} className="gap-1 text-red-600 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /> Supprimer</Button>
                 </div>
@@ -492,14 +392,14 @@ export default function WorkflowEngine() {
         </div>
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Modèles cliniques prêts à adapter</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><BarChart3 className="w-5 h-5" /> Modèles prédéfinis</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {templates.map((template) => (
                 <button key={template.id} type="button" onClick={() => openCreate(template)} className="p-4 rounded-lg border bg-gray-50 text-left hover:bg-blue-50 hover:border-blue-300 transition">
                   <p className="font-medium text-sm">{template.nom}</p>
                   <p className="text-xs text-gray-600 mt-1">{template.description}</p>
-                  <p className="mt-3 text-xs text-teal-700">Adapter ce modèle</p>
+                  <p className="text-xs text-blue-700 mt-3">Utiliser ce modèle</p>
                 </button>
               ))}
             </div>
@@ -511,8 +411,6 @@ export default function WorkflowEngine() {
         open={editorOpen}
         mode={editorMode}
         initialValue={editorInitialValue}
-        teamMembers={teamMembers}
-        workflowCatalog={workflowCatalog}
         onOpenChange={setEditorOpen}
         onSave={handleSaveWorkflow}
       />
@@ -525,11 +423,6 @@ export default function WorkflowEngine() {
         workflow={historyTarget}
         onOpenChange={(open) => { if (!open) setHistoryTarget(null); }}
       />
-      <WorkflowActivationDialog
-        workflow={activationTarget}
-        onOpenChange={(open) => { if (!open) setActivationTarget(null); }}
-        onActivate={async (workflow) => { await handleToggleWorkflow(workflow, true); setActivationTarget(null); }}
-      />
     </DashboardLayout>
   );
 }
@@ -539,82 +432,63 @@ function StatCard({ title, value, detail, tone }: { title: string; value: string
   return <Card className={toneClass}><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{title}</CardTitle></CardHeader><CardContent><div className="text-3xl font-bold">{value}</div><p className="text-xs mt-2">{detail}</p></CardContent></Card>;
 }
 
-function WorkflowActivationDialog({ workflow, onOpenChange, onActivate }: { workflow: Workflow | null; onOpenChange: (open: boolean) => void; onActivate: (workflow: Workflow) => Promise<void>; }) {
-  const [reviewed, setReviewed] = useState(false);
-  const [isActivating, setIsActivating] = useState(false);
-  useEffect(() => { if (workflow) { setReviewed(false); setIsActivating(false); } }, [workflow]);
-  const trigger = workflow ? TRIGGER_PRESETS.find((item) => item.triggerType === workflow.trigger_type) : undefined;
-  return <Dialog open={!!workflow} onOpenChange={onOpenChange}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Revoir avant activation</DialogTitle><DialogDescription>Le scénario reste en brouillon tant que cette revue n’est pas confirmée.</DialogDescription></DialogHeader>{workflow && <div className="space-y-4"><div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Scénario</p><p className="mt-1 font-semibold text-slate-950">{workflow.nom}</p>{workflow.description && <p className="mt-1 text-sm text-slate-600">{workflow.description}</p>}<p className="mt-3 text-sm text-slate-700"><strong>Déclencheur :</strong> {trigger?.label || workflow.trigger_type}</p></div><div className="rounded-xl border border-slate-200 p-4"><p className="text-sm font-semibold text-slate-900">Actions prévues</p><ul className="mt-2 space-y-2 text-sm text-slate-600">{workflow.actions?.map((action, index) => <li key={`${action.type}-${index}`} className="flex gap-2"><span className="font-semibold text-teal-700">{index + 1}.</span>{ACTION_TYPES.find((item) => item.value === action.type)?.label || action.type}</li>) || <li>Aucune action détectée.</li>}</ul></div><label className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} className="mt-0.5 accent-teal-700" /><span>J’ai vérifié le déclencheur, les actions et les destinataires. Les messages externes restent à approuver avant envoi.</span></label></div>}<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Retour</Button><Button disabled={!reviewed || isActivating || !workflow} onClick={async () => { if (!workflow) return; setIsActivating(true); try { await onActivate(workflow); } finally { setIsActivating(false); } }} className="bg-teal-700 text-white hover:bg-teal-800">{isActivating ? <Spinner className="h-4 w-4" /> : 'Activer le scénario'}</Button></DialogFooter></DialogContent></Dialog>;
-}
-
-function WorkflowEditorDialog({ open, mode, initialValue, teamMembers, workflowCatalog, onOpenChange, onSave }: { open: boolean; mode: 'create' | 'edit'; initialValue: WorkflowFormValue; teamMembers: TeamMember[]; workflowCatalog: WorkflowCatalog; onOpenChange: (open: boolean) => void; onSave: (value: WorkflowFormValue) => Promise<void>; }) {
+function WorkflowEditorDialog({ open, mode, initialValue, onOpenChange, onSave }: { open: boolean; mode: 'create' | 'edit'; initialValue: WorkflowFormValue; onOpenChange: (open: boolean) => void; onSave: (value: WorkflowFormValue) => Promise<void>; }) {
   const [form, setForm] = useState<WorkflowFormValue>(initialValue);
   const [isSaving, setIsSaving] = useState(false);
-  const [brief, setBrief] = useState('');
 
-  useEffect(() => { if (open) { setForm(initialValue); setBrief(''); } }, [open, initialValue]);
+  useEffect(() => { if (open) setForm(initialValue); }, [open, initialValue]);
 
-  const updateField = <K extends keyof WorkflowFormValue>(field: K, value: WorkflowFormValue[K]) => setForm((current) => ({ ...current, [field]: value }));
-  const updateAction = <K extends keyof VisualActionDraft>(index: number, field: K, value: VisualActionDraft[K]) => setForm((current) => ({ ...current, actions: current.actions.map((action, actionIndex) => actionIndex === index ? { ...action, [field]: value } : action) }));
+  const updateField = (field: keyof WorkflowFormValue, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const updateAction = (index: number, field: keyof ActionDraft, value: string) => setForm((current) => ({ ...current, actions: current.actions.map((action, actionIndex) => actionIndex === index ? { ...action, [field]: value } : action) }));
   const addAction = () => setForm((current) => ({ ...current, actions: [...current.actions, { ...DEFAULT_ACTION }] }));
   const removeAction = (index: number) => setForm((current) => ({ ...current, actions: current.actions.filter((_, actionIndex) => actionIndex !== index) }));
-  const trigger = workflowCatalog.triggers.find((item) => item.key === form.trigger_key) || workflowCatalog.triggers[0] || TRIGGER_PRESETS[0];
-  const proposeFromBrief = () => {
-    const normalized = brief.trim().toLocaleLowerCase('fr-FR');
-    if (!normalized) { toast.error('Décrivez le besoin clinique à couvrir.'); return; }
-    const proposedTrigger = normalized.includes('consent') ? 'pending_consent'
-      : normalized.includes('rappel') || normalized.includes('appeler') ? 'callback_request'
-      : normalized.includes('injection') ? 'after_injection'
-      : normalized.includes('devis') ? 'unaccepted_quote'
-      : normalized.includes('inactif') ? 'inactive_patient'
-      : normalized.includes('post') || normalized.includes('suivi') ? 'after_act'
-      : 'manual';
-    const daysMatch = normalized.match(/(\d+)\s*jour/);
-    const hoursMatch = normalized.match(/(\d+)\s*(?:h|heure)/);
-    const delay = daysMatch ? Math.min(365, Math.max(0, Number(daysMatch[1])))
-      : hoursMatch ? Math.max(1, Math.ceil(Number(hoursMatch[1]) / 24))
-      : normalized.includes('demain') ? 1
-      : normalized.includes('semaine') ? 7
-      : 1;
-    const actionType = normalized.includes('sms') ? 'send_sms'
-      : normalized.includes('email') || normalized.includes('e-mail') ? 'send_email'
-      : normalized.includes('whatsapp') || normalized.includes('message') ? 'send_whatsapp'
-      : 'create_task';
-    const assigneeRole = normalized.includes('assistante') || normalized.includes('secrétaire') ? 'assistante'
-      : normalized.includes('esthéticienne') ? 'estheticienne'
-      : normalized.includes('médecin') || normalized.includes('docteur') ? 'medecin'
-      : null;
-    setForm((current) => ({
-      ...current,
-      nom: current.nom || `Scénario — ${brief.trim().slice(0, 70)}`,
-      description: current.description || brief.trim(),
-      trigger_key: proposedTrigger,
-      delay_days: delay,
-      actions: [{ ...DEFAULT_ACTION, type: actionType, recipient: actionType === 'create_task' ? 'equipe' : 'patient', assignee_role: actionType === 'create_task' ? assigneeRole : null, message: actionType === 'create_task' ? '' : brief.trim(), task_title: normalized.includes('consent') ? 'Relancer la signature du consentement' : normalized.includes('rappel') ? 'Rappeler le patient' : 'Vérifier le suivi patient', delay_days: 0 }],
-    }));
-    toast.success('Proposition créée : relisez-la puis adaptez-la avant enregistrement.');
-  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (form.actions.length === 0) { toast.error('Ajoutez au moins une action'); return; }
+    const delay = Math.max(1, Number(form.simple_delay) || 24);
+    const firstAction = form.actions[0];
+    const guidedTrigger = form.trigger_type === 'event_based'
+      ? { type: 'appointment_completed', delay_hours: form.simple_delay_unit === 'jours' ? delay * 24 : delay }
+      : form.trigger_type === 'condition_based'
+        ? { inactive_days: form.simple_delay_unit === 'jours' ? delay : delay / 24 }
+        : form.trigger_type === 'scheduled'
+          ? { reminder_delay: `${delay} ${form.simple_delay_unit}` }
+          : {};
+    const guidedActionConfig = firstAction.type.startsWith('send_')
+      ? { template: form.simple_message.trim(), personalization: true, require_approval: form.require_approval }
+      : firstAction.type === 'create_task'
+        ? { title: form.simple_message.trim() || form.nom.trim(), priority: 'medium', require_approval: form.require_approval }
+        : { require_approval: form.require_approval };
+    const guidedForm = form.advanced_mode ? form : {
+      ...form,
+      trigger_config_text: JSON.stringify(guidedTrigger),
+      conditions_text: JSON.stringify({ opted_out: false }),
+      actions: [{ ...firstAction, config_text: JSON.stringify(guidedActionConfig) }, ...form.actions.slice(1)],
+    };
     setIsSaving(true);
-    try { await onSave(form); } catch { /* Le parent affiche l’erreur. */ } finally { setIsSaving(false); }
+    try { await onSave(guidedForm); } catch { /* Le parent affiche l’erreur. */ } finally { setIsSaving(false); }
   };
 
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader><DialogTitle>{mode === 'edit' ? 'Modifier le scénario' : 'Nouveau scénario clinique'}</DialogTitle><DialogDescription>Construisez le scénario avec des mots métier. Les messages restent toujours à valider humainement avant envoi.</DialogDescription></DialogHeader>
-      <form onSubmit={submit} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2"><div><Label htmlFor="workflow-nom">Nom du scénario *</Label><Input id="workflow-nom" value={form.nom} onChange={(event) => updateField('nom', event.target.value)} placeholder="Ex. Rappel de contrôle après injection" required maxLength={200} /></div><div><Label htmlFor="workflow-description">Objectif clinique</Label><Input id="workflow-description" value={form.description} onChange={(event) => updateField('description', event.target.value)} placeholder="Ex. Ne pas oublier le contrôle à J+14" maxLength={5000} /></div></div>
-        <section className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-end"><div className="flex-1"><Label htmlFor="workflow-brief" className="text-violet-950">Génération guidée par modèles métier</Label><Input id="workflow-brief" value={brief} onChange={(event) => setBrief(event.target.value)} placeholder="Ex. Rappeler les patients trois jours après une injection" className="mt-1 bg-white" /><p className="mt-1 text-xs text-violet-800">Une proposition modifiable sera créée ; aucune règle n’est activée automatiquement.</p></div><Button type="button" onClick={proposeFromBrief} className="bg-violet-700 text-white hover:bg-violet-800">Proposer une base</Button></div></section>
-        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-slate-900">1. Quand faut-il agir ?</p><p className="text-xs text-slate-500">Choisissez un déclencheur clinique ou opérationnel.</p></div><span className="rounded-full bg-teal-100 px-2.5 py-1 text-xs font-semibold text-teal-800">Déclencheur</span></div><div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">{workflowCatalog.triggers.map((preset) => <button type="button" key={preset.key} onClick={() => updateField('trigger_key', preset.key)} className={`rounded-xl border p-3 text-left transition-colors ${form.trigger_key === preset.key ? 'border-teal-400 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-white hover:border-teal-200'}`}><span className="block text-sm font-semibold text-slate-900">{preset.label}</span><span className="mt-1 block text-xs leading-5 text-slate-500">{preset.description}</span></button>)}</div>{trigger.key !== 'manual' && trigger.key !== 'birthday' && trigger.key !== 'monthly' && <div className="mt-4 max-w-xs"><Label htmlFor="workflow-delay">Délai avant action (jours)</Label><Input id="workflow-delay" type="number" min="0" max="365" value={form.delay_days} onChange={(event) => updateField('delay_days', Number(event.target.value) || 0)} /></div>}</section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-4"><div><p className="text-sm font-semibold text-slate-900">2. Pour quels patients ?</p><p className="text-xs text-slate-500">Ces règles protègent les préférences de contact du patient.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-700"><input type="checkbox" checked={form.only_active_patients} onChange={(event) => updateField('only_active_patients', event.target.checked)} className="mt-0.5 accent-teal-700" /><span><strong className="font-medium text-slate-900">Patients actifs uniquement</strong><br />Ne pas inclure les dossiers inactifs.</span></label><label className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-700"><input type="checkbox" checked={form.exclude_opted_out} onChange={(event) => updateField('exclude_opted_out', event.target.checked)} className="mt-0.5 accent-teal-700" /><span><strong className="font-medium text-slate-900">Respecter le refus de contact</strong><br />Exclure les patients opposés aux communications.</span></label></div></section>
-        <section className="rounded-2xl border border-slate-200 bg-white p-4"><div><p className="text-sm font-semibold text-slate-900">2 bis. Affiner le contexte clinique</p><p className="text-xs text-slate-500">Choisissez des paramètres métier supplémentaires sans manipuler de données techniques.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><div><Label htmlFor="workflow-patient-segment">Segment clinique</Label><select id="workflow-patient-segment" aria-label="Segment clinique" value={form.patient_segment} onChange={(event) => updateField('patient_segment', event.target.value as WorkflowFormValue['patient_segment'])} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{(workflowCatalog.patient_segments || PATIENT_SEGMENT_OPTIONS).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div><div><Label htmlFor="workflow-appointment-scope">Contexte du rendez-vous</Label><select id="workflow-appointment-scope" aria-label="Contexte du rendez-vous" value={form.appointment_scope} onChange={(event) => updateField('appointment_scope', event.target.value as WorkflowFormValue['appointment_scope'])} className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm">{(workflowCatalog.appointment_scopes || APPOINTMENT_SCOPE_OPTIONS).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></div></section>
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-slate-900">3. Que doit faire l’équipe ?</p><p className="text-xs text-slate-500">Ajoutez une ou plusieurs actions dans l’ordre.</p></div><Button type="button" variant="outline" size="sm" onClick={addAction}><Plus className="mr-1 h-4 w-4" /> Ajouter</Button></div>{form.actions.map((action, index) => { const actionDefinition = workflowCatalog.actions.find((item) => item.value === action.type); return <div key={`${index}-${action.type}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex flex-wrap items-center gap-2"><select aria-label={`Action ${index + 1}`} value={action.type} onChange={(event) => updateAction(index, 'type', event.target.value)} className="h-10 min-w-52 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm">{workflowCatalog.actions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><select aria-label={`Destinataire de l’action ${index + 1}`} value={action.recipient} onChange={(event) => updateAction(index, 'recipient', event.target.value as VisualActionDraft['recipient'])} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="patient">Pour le patient</option><option value="equipe">Pour l’équipe</option></select><Button type="button" variant="ghost" size="sm" onClick={() => removeAction(index)} disabled={form.actions.length === 1} className="text-red-600"><Trash2 className="h-4 w-4" /></Button></div><p className="mt-2 text-xs text-slate-500">{actionDefinition?.description}</p>{action.type === 'create_task' && <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_140px_110px]"><Input value={action.task_title} onChange={(event) => updateAction(index, 'task_title', event.target.value)} placeholder="Ex. Appeler le patient" /><select value={action.priority} onChange={(event) => updateAction(index, 'priority', event.target.value as VisualActionDraft['priority'])} className="rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="low">Priorité basse</option><option value="medium">Priorité normale</option><option value="high">Priorité élevée</option></select><Input type="number" min="0" value={action.delay_days} onChange={(event) => updateAction(index, 'delay_days', Number(event.target.value) || 0)} aria-label="Délai de tâche en jours" /></div>}{['send_whatsapp', 'send_sms', 'send_email'].includes(action.type) && <div className="mt-3"><Label>Consigne ou modèle de message</Label><Textarea value={action.message} onChange={(event) => updateAction(index, 'message', event.target.value)} rows={2} placeholder="Ex. Prendre des nouvelles du patient et proposer un créneau de contrôle." /><p className="mt-1 text-[11px] text-amber-700">Le message est préparé comme brouillon et demande une approbation humaine.</p></div>}{action.type === 'add_fidelite_points' && <div className="mt-3 grid gap-3 sm:grid-cols-[120px_1fr]"><Input type="number" min="0" value={action.points} onChange={(event) => updateAction(index, 'points', Number(event.target.value) || 0)} aria-label="Nombre de points" /><Input value={action.reason} onChange={(event) => updateAction(index, 'reason', event.target.value)} placeholder="Motif des points" /></div>}{action.type === 'launch_campaign' && <div className="mt-3 grid gap-3"><Input value={action.task_title} onChange={(event) => updateAction(index, 'task_title', event.target.value)} placeholder="Nom de la campagne" /><Textarea value={action.message} onChange={(event) => updateAction(index, 'message', event.target.value)} rows={2} placeholder="Objectif ou contenu à faire valider" /></div>}</div>; })}</section>
-        {form.actions.some((action) => action.type === 'create_task') && <section className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-sm font-semibold text-slate-900">4. À qui attribuer les tâches ?</p><p className="mt-1 text-xs text-slate-500">Laissez la tâche dans la file commune, assignez-la à un rôle, ou désignez un membre actif précis.</p><div className="mt-3 space-y-3">{form.actions.map((action, index) => action.type === 'create_task' ? <div key={`assignee-${index}`} className="rounded-xl bg-slate-50 p-3"><p className="mb-2 text-sm text-slate-700">{action.task_title || `Tâche ${index + 1}`}</p><div className="grid gap-2 sm:grid-cols-2"><select aria-label={`Rôle responsable de la tâche ${index + 1}`} value={action.assignee_role ?? ''} onChange={(event) => { const role = event.target.value || null; updateAction(index, 'assignee_role', role); if (role) updateAction(index, 'assignee_id', null); }} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="">File d’équipe non attribuée</option>{ASSIGNMENT_ROLE_OPTIONS.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}</select><select aria-label={`Responsable nommé de la tâche ${index + 1}`} value={action.assignee_id ?? ''} onChange={(event) => { const assigneeId = event.target.value ? Number(event.target.value) : null; updateAction(index, 'assignee_id', assigneeId); if (assigneeId) updateAction(index, 'assignee_role', null); }} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="">Choisir un membre précis</option>{teamMembers.map((member) => <option key={member.id} value={member.id}>{member.prenom} {member.nom} · {member.role}</option>)}</select></div></div> : null)}</div></section>}
-        <section className="rounded-2xl border border-teal-200 bg-teal-50 p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700">Prévisualisation avant enregistrement</p><p className="mt-2 text-sm leading-6 text-teal-950">Quand <strong>{trigger.label.toLocaleLowerCase('fr-FR')}</strong>{form.delay_days > 0 ? `, après ${form.delay_days} jour${form.delay_days > 1 ? 's' : ''}` : ''}, le scénario appliquera {form.actions.length} action{form.actions.length > 1 ? 's' : ''} pour les patients correspondant aux règles choisies.</p></section>
-        <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button><Button type="submit" disabled={isSaving} className="bg-teal-700 text-white hover:bg-teal-800">{isSaving ? <Spinner className="w-4 h-4" /> : mode === 'edit' ? 'Enregistrer la version' : 'Créer le brouillon à valider'}</Button></DialogFooter>
+    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader><DialogTitle>{mode === 'edit' ? 'Modifier le workflow' : 'Nouveau workflow'}</DialogTitle><DialogDescription>Définissez le déclencheur et les actions à exécuter.</DialogDescription></DialogHeader>
+      <form onSubmit={submit} className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><Label htmlFor="workflow-nom">Nom *</Label><Input id="workflow-nom" value={form.nom} onChange={(event) => updateField('nom', event.target.value)} required maxLength={200} /></div>
+          <div><Label htmlFor="workflow-trigger">Déclencheur *</Label><select id="workflow-trigger" value={form.trigger_type} onChange={(event) => updateField('trigger_type', event.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">{TRIGGER_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+        </div>
+        <div><Label htmlFor="workflow-description">Description</Label><Textarea id="workflow-description" value={form.description} onChange={(event) => updateField('description', event.target.value)} rows={2} maxLength={5000} /></div>
+        {!form.advanced_mode && <Card className="border-blue-100 bg-blue-50"><CardContent className="pt-4 space-y-4"><p className="text-sm font-medium text-blue-900">Configuration guidée</p><p className="text-xs text-blue-800">Répondez simplement aux questions suivantes. L’application prépare automatiquement la configuration technique.</p><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><Label htmlFor="workflow-delay">Délai</Label><div className="flex gap-2"><Input id="workflow-delay" type="number" min="1" value={form.simple_delay} onChange={(event) => updateField('simple_delay', event.target.value)} /><select value={form.simple_delay_unit} onChange={(event) => updateField('simple_delay_unit', event.target.value as WorkflowFormValue['simple_delay_unit'])} className="h-9 px-3 border rounded-md text-sm"><option value="heures">heures</option><option value="jours">jours</option></select></div></div><div><Label htmlFor="workflow-approval">Validation</Label><select id="workflow-approval" value={form.require_approval ? 'required' : 'automatic'} onChange={(event) => setForm((current) => ({ ...current, require_approval: event.target.value === 'required' }))} className="w-full h-9 px-3 border rounded-md text-sm"><option value="required">Validation humaine obligatoire</option><option value="automatic">Exécution automatique</option></select></div></div><div><Label htmlFor="workflow-message">Message ou consigne</Label><Textarea id="workflow-message" value={form.simple_message} onChange={(event) => updateField('simple_message', event.target.value)} rows={3} placeholder="Écrivez le message ou la consigne" /></div></CardContent></Card>}
+        {form.advanced_mode && <div><Label htmlFor="workflow-trigger-config">Configuration avancée du déclencheur (JSON)</Label><Textarea id="workflow-trigger-config" value={form.trigger_config_text} onChange={(event) => updateField('trigger_config_text', event.target.value)} rows={3} placeholder={'Exemple : {"type":"appointment_completed","delay_hours":24}'} className="font-mono text-xs" /></div>}
+        {form.advanced_mode && <div><Label htmlFor="workflow-conditions">Conditions avancées (JSON)</Label><Textarea id="workflow-conditions" value={form.conditions_text} onChange={(event) => updateField('conditions_text', event.target.value)} rows={3} placeholder={'Exemple : {"opted_out":false}'} className="font-mono text-xs" /></div>}
+        <div className="space-y-3"><div className="flex items-center justify-between"><Label>Actions *</Label><Button type="button" variant="outline" size="sm" onClick={addAction}><Plus className="w-4 h-4 mr-1" /> Ajouter une action</Button></div>
+          {form.actions.map((action, index) => <div key={`${index}-${action.type}`} className="border rounded-md p-3 space-y-3">
+            <div className="flex items-center gap-2"><select value={action.type} onChange={(event) => updateAction(index, 'type', event.target.value)} className="flex-1 h-9 px-3 border rounded-md text-sm">{ACTION_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><Button type="button" variant="ghost" size="sm" onClick={() => removeAction(index)} disabled={form.actions.length === 1} className="text-red-600"><Trash2 className="w-4 h-4" /></Button></div>
+            {form.advanced_mode ? <Textarea value={action.config_text} onChange={(event) => updateAction(index, 'config_text', event.target.value)} rows={4} className="font-mono text-xs" placeholder={'Exemple : {"template":"Votre message"}'} /> : <p className="text-xs text-muted-foreground">Cette action sera configurée automatiquement à partir des choix guidés.</p>}
+          </div>)}
+        </div>
+        <div className="flex items-center justify-between gap-3"><Button type="button" variant="ghost" size="sm" onClick={() => setForm((current) => ({ ...current, advanced_mode: !current.advanced_mode }))}>{form.advanced_mode ? 'Revenir au mode simple' : 'Options avancées'}</Button><DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button><Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="w-4 h-4" /> : mode === 'edit' ? 'Enregistrer' : 'Créer le brouillon'}</Button></DialogFooter></div>
       </form>
     </DialogContent>
   </Dialog>;

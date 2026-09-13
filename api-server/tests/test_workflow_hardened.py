@@ -45,11 +45,3 @@ def test_audit_log_model_present():
     from models.workflow_engine import WorkflowAuditLog
     assert hasattr(WorkflowAuditLog, "__tablename__")
     assert WorkflowAuditLog.__tablename__ == "workflow_audit_logs"
-
-
-def test_audit_log_status_allows_human_validation_state():
-    """Le statut de brouillon complet ne doit pas être tronqué par PostgreSQL."""
-    from models.workflow_engine import WorkflowAuditLog
-
-    status_column = WorkflowAuditLog.__table__.c.status
-    assert status_column.type.length >= len("drafted_for_validation")

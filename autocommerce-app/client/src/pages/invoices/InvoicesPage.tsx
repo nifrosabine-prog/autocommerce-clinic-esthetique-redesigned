@@ -10,9 +10,11 @@ import { PatientAutocomplete, type PatientOption } from '@/components/patients/P
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
-import { Plus, Trash2, Scan, Zap, CheckCircle, Download, FileText } from 'lucide-react';
+import { AlertCircle, Plus, Trash2, Scan, Zap, CheckCircle, Download, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCurrency } from '@/hooks/useCurrency';
+import { formatMoney, getInvoiceCurrency, normalizeCurrency } from '@/lib/currency';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -25,7 +27,15 @@ interface Invoice {
   numero_facture: string;
   patient_id: number;
   dossier_id?: number | null;
+  sous_total?: number;
+  remise_globale_pct?: number;
+  taux_tva?: number;
+  montant_tva?: number;
   total_ttc: number;
+  montant_paye?: number;
+  solde?: number;
+  currency_code?: string;
+  currency_symbol?: string;
   statut: string;
   date_emission: string;
 }
@@ -35,6 +45,8 @@ interface Expense {
   titre: string;
   fournisseur: string | null;
   montant_ttc: number;
+  currency_code?: string;
+  currency_symbol?: string;
   date_depense: string;
   facture_scan_statut: string;
 }
@@ -47,45 +59,6 @@ const INVOICE_STATUT: Record<string, { label: string; color: string }> = {
   annulee: { label: 'Annulée', color: 'bg-red-100 text-red-800' },
 };
 
-const AUDIT_LABELS: Record<string, string> = {
-  statut: 'Statut',
-  total_ttc: 'Total TTC',
-  mode_paiement: 'Mode de paiement',
-  points_gagnes: 'Points fidélité',
-};
-
-const humanizeInvoiceStatus = (raw: unknown): string => {
-  if (typeof raw !== 'string') return '';
-  const value = raw.trim();
-  if (!value.startsWith('{')) return value;
-  try {
-    const parsed = JSON.parse(value);
-    return String(parsed.statut ?? parsed.status ?? value);
-  } catch {
-    return value;
-  }
-};
-
-const formatAuditValue = (key: string, value: unknown): string => {
-  if (key === 'total_ttc') return `${Number(value || 0).toFixed(3)} DT`;
-  if (key === 'mode_paiement') {
-    return ({ especes: 'Espèces', carte: 'Carte bancaire', cheque: 'Chèque', virement: 'Virement' } as Record<string, string>)[String(value)] || String(value);
-  }
-  if (key === 'statut') return INVOICE_STATUT[String(value)]?.label || String(value);
-  return String(value ?? '—');
-};
-
-const formatAuditDetails = (raw: unknown): string => {
-  let value: Record<string, unknown> = {};
-  if (raw && typeof raw === 'object') value = raw as Record<string, unknown>;
-  else if (typeof raw === 'string') {
-    try { value = JSON.parse(raw) as Record<string, unknown>; } catch { return raw; }
-  }
-  return Object.entries(value)
-    .map(([key, item]) => `${AUDIT_LABELS[key] || key}: ${formatAuditValue(key, item)}`)
-    .join(' · ') || '—';
-};
-
 const EXPENSE_STATUT: Record<string, { label: string; color: string }> = {
   en_attente: { label: 'En attente', color: 'bg-yellow-100 text-yellow-800' },
   traitee_ia: { label: 'Traitée (IA)', color: 'bg-blue-100 text-blue-800' },
@@ -95,6 +68,7 @@ const EXPENSE_STATUT: Record<string, { label: string; color: string }> = {
 
 export default function InvoicesPage() {
   const { user } = useAuth();
+  const currency = useCurrency();
   const canManageInvoices = ['directrice', 'assistante', 'admin'].includes(user?.role || '');
   const canCancelInvoices = ['directrice', 'admin'].includes(user?.role || '');
   const canManageExpenses = ['directrice', 'assistante'].includes(user?.role || '');
@@ -110,7 +84,7 @@ export default function InvoicesPage() {
   const [payTarget, setPayTarget] = useState<Invoice | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Invoice | null>(null);
   const [scanOpen, setScanOpen] = useState(false);
-  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -129,30 +103,14 @@ export default function InvoicesPage() {
       setExpenses(expensesRes.status === 'fulfilled' && Array.isArray(expensesRes.value.data) ? expensesRes.value.data : []);
       setPendingActs(pendingRes.status === 'fulfilled' && Array.isArray(pendingRes.value.data) ? pendingRes.value.data : []);
       setAuditLogs(auditRes.status === 'fulfilled' && Array.isArray(auditRes.value.data) ? auditRes.value.data : []);
+      const allFailed = [invoicesRes, expensesRes, pendingRes, auditRes].every((r) => r.status === 'rejected');
+      setLoadError(allFailed ? "Erreur lors du chargement — vérifiez la connexion" : null);
     } catch (err: any) {
       console.error('Failed to load data:', err);
+      setLoadError('Erreur lors du chargement');
       toast.error('Erreur lors du chargement');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDownloadInvoice = async (invoice: Invoice) => {
-    try {
-      setDownloadingInvoiceId(invoice.id);
-      const response = await api.get(`/factures/${invoice.id}/pdf`, { responseType: 'blob' });
-      const blobUrl = URL.createObjectURL(response.data);
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = `${invoice.numero_facture}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(blobUrl);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Impossible de télécharger la facture');
-    } finally {
-      setDownloadingInvoiceId(null);
     }
   };
 
@@ -165,6 +123,29 @@ export default function InvoicesPage() {
       toast.error(err.response?.data?.detail || 'Erreur lors de la validation');
     }
   };
+
+  if (loadError && invoices.length === 0 && expenses.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <Card className="w-full max-w-md border-red-300 bg-red-50/70">
+            <CardContent className="flex items-center justify-between gap-4 py-6">
+              <div className="flex items-center gap-3 text-red-800">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Impossible de charger les données</p>
+                  <p className="text-sm text-red-700">{loadError}</p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => void loadData()}>
+                <RefreshCw className="w-4 h-4 mr-2" /> Réessayer
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -210,23 +191,16 @@ export default function InvoicesPage() {
             <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm">
               <CardContent className="pt-6">
                 {invoices.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                    <div className="rounded-full bg-slate-100 p-3 text-slate-500"><FileText className="h-6 w-6" /></div>
-                    <div>
-                      <p className="font-medium text-slate-800">Aucune facture client enregistrée</p>
-                      <p className="mt-1 text-sm text-muted-foreground">Les références de paiement ne remplacent pas une facture. Créez une facture client pour la rendre visible ici.</p>
-                    </div>
-                    {canManageInvoices && (
-                      <Button onClick={() => setCreateInvoiceOpen(true)}><Plus className="mr-2 h-4 w-4" />Créer une facture</Button>
-                    )}
-                  </div>
+                  <p className="text-center text-muted-foreground py-8">Aucune facture</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Numéro</TableHead>
-                          <TableHead>Montant TTC</TableHead>
+                          <TableHead>Base HT</TableHead>
+                          <TableHead>TVA</TableHead>
+                          <TableHead>Total TTC</TableHead>
                           <TableHead>Statut</TableHead>
                           <TableHead>Date d'émission</TableHead>
                           <TableHead>Actions</TableHead>
@@ -234,17 +208,25 @@ export default function InvoicesPage() {
                       </TableHeader>
                       <TableBody>
                         {invoices.map((invoice) => {
-                          const invoiceStatus = humanizeInvoiceStatus(invoice.statut);
-                          const s = INVOICE_STATUT[invoiceStatus] || { label: invoiceStatus || 'Statut inconnu', color: 'bg-gray-100 text-gray-800' };
-                          const canPay = canManageInvoices && ['envoyee', 'partiellement_payee', 'brouillon'].includes(invoiceStatus);
-                          const canCancel = canCancelInvoices && !['payee', 'annulee'].includes(invoiceStatus);
+                          const invoiceCurrency = getInvoiceCurrency(invoice, currency);
+                          const s = INVOICE_STATUT[invoice.statut] || { label: invoice.statut, color: 'bg-gray-100 text-gray-800' };
+                          const canPay = canManageInvoices && ['envoyee', 'partiellement_payee', 'brouillon'].includes(invoice.statut);
+                          const canCancel = canCancelInvoices && !['payee', 'annulee'].includes(invoice.statut);
                           return (
                             <TableRow key={invoice.id}>
                               <TableCell className="font-medium">
                                 <div>{invoice.numero_facture}</div>
                                 {invoice.dossier_id && <Badge variant="outline" className="mt-1 text-[10px]">Dossier #{invoice.dossier_id}</Badge>}
                               </TableCell>
-                              <TableCell>{invoice.total_ttc} DT</TableCell>
+                              <TableCell>
+                                <div>{formatMoney(invoice.sous_total ?? invoice.total_ttc, invoiceCurrency)}</div>
+                                {invoice.remise_globale_pct ? <span className="text-xs text-muted-foreground">Remise {invoice.remise_globale_pct}%</span> : null}
+                              </TableCell>
+                              <TableCell>
+                                <div>{formatMoney(invoice.montant_tva ?? 0, invoiceCurrency)}</div>
+                                <span className="text-xs text-muted-foreground">{(Number(invoice.taux_tva ?? 0) * 100).toFixed(1)}%</span>
+                              </TableCell>
+                              <TableCell className="font-semibold">{formatMoney(invoice.total_ttc, invoiceCurrency)}</TableCell>
                               <TableCell>
                                 <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
                               </TableCell>
@@ -252,9 +234,6 @@ export default function InvoicesPage() {
                                 {new Date(invoice.date_emission).toLocaleDateString('fr-FR')}
                               </TableCell>
                               <TableCell className="space-x-2">
-                                <Button variant="outline" size="sm" onClick={() => handleDownloadInvoice(invoice)} disabled={downloadingInvoiceId === invoice.id}>
-                                  {downloadingInvoiceId === invoice.id ? <Spinner className="mr-1 h-3 w-3" /> : <Download className="mr-1 h-3 w-3" />} Voir la facture
-                                </Button>
                                 {canPay && (
                                   <Button variant="outline" size="sm" onClick={() => setPayTarget(invoice)}>Payer</Button>
                                 )}
@@ -303,7 +282,10 @@ export default function InvoicesPage() {
                             ))}
                           </TableCell>
                           <TableCell>
-                            {act.actes_details?.reduce((acc: number, a: any) => acc + (a.prix || 0), 0).toFixed(3)} DT
+                            {formatMoney(
+                              act.actes_details?.reduce((acc: number, a: any) => acc + Number(a.prix || 0), 0) || 0,
+                              currency,
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => setBillingTarget(act)}>
@@ -345,7 +327,7 @@ export default function InvoicesPage() {
                             <TableRow key={expense.id}>
                               <TableCell className="font-medium">{expense.titre}</TableCell>
                               <TableCell>{expense.fournisseur || '—'}</TableCell>
-                              <TableCell>{expense.montant_ttc} DT</TableCell>
+                              <TableCell>{formatMoney(expense.montant_ttc, normalizeCurrency(expense))}</TableCell>
                               <TableCell>
                                 <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
                               </TableCell>
@@ -395,7 +377,7 @@ export default function InvoicesPage() {
                             <TableCell className="text-sm font-medium">{log.entite_type} #{log.entite_id}</TableCell>
                             <TableCell className="text-sm">{log.modifie_par_nom}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">
-                              {formatAuditDetails(log.valeur_apres)}
+                              {JSON.stringify(log.valeur_apres)}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -419,6 +401,7 @@ export default function InvoicesPage() {
 }
 
 function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOpenChange: () => void, onInvoiced: () => void }) {
+  const currency = useCurrency();
   const [lignes, setLignes] = useState<any[]>([]);
   const [remise, setRemise] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -427,6 +410,7 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
   useEffect(() => {
     if (target) {
       setLignes(target.actes_details.map((l: any) => ({ 
+        acte_id: l.id ?? l.acte_id,
         description: l.nom, 
         prix: l.prix, 
         quantite: 1 
@@ -487,7 +471,7 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
                     onChange={(e) => updateLigne(i, 'prix', Number(e.target.value))}
                     className="w-24 h-8 text-sm"
                   />
-                  <span className="text-xs text-muted-foreground">DT</span>
+                  <span className="text-xs text-muted-foreground">{currency.currency_symbol}</span>
                 </div>
               ))}
             </div>
@@ -515,7 +499,7 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
                 <CheckCircle className="w-6 h-6" />
               </div>
               <h3 className="text-lg font-bold">Facture {result.numero}</h3>
-              <p className="text-2xl font-bold text-primary">{result.total.toFixed(3)} DT</p>
+              <p className="text-2xl font-bold text-primary">{formatMoney(result.total, normalizeCurrency(result))}</p>
               <p className="text-sm text-muted-foreground">Remise totale appliquée : {result.remise_appliquee}%</p>
             </div>
             <div className="flex flex-col gap-2">
@@ -543,6 +527,7 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
   const [patientAutocompleteKey, setPatientAutocompleteKey] = useState(0);
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
   const [patientId, setPatientId] = useState('');
+  const [dossierId, setDossierId] = useState('');
   const [lignes, setLignes] = useState<LigneForm[]>([{ description: '', prix: '', quantite: '1' }]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -550,6 +535,7 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
     if (open) {
       setPatientId('');
       setSelectedPatient(null);
+      setDossierId('');
       setPatientAutocompleteKey((prev) => prev + 1);
       setLignes([{ description: '', prix: '', quantite: '1' }]);
     }
@@ -567,6 +553,7 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientId) { toast.error('Sélectionnez un patient'); return; }
+    if (!dossierId || Number(dossierId) <= 0) { toast.error('Indiquez le dossier patient à facturer'); return; }
     const validLignes = lignes.filter((l) => l.description.trim() && Number(l.prix) > 0);
     if (validLignes.length === 0) { toast.error('Ajoutez au moins une ligne valide'); return; }
 
@@ -574,6 +561,7 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
     try {
       await api.post('/factures', {
         patient_id: Number(patientId),
+        dossier_id: Number(dossierId),
         actes: validLignes.map((l) => ({
           description: l.description.trim(),
           prix: l.prix,
@@ -604,7 +592,12 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
             onSelect={handlePatientSelect}
           />
 
-          <div className="space-y-2">
+      <div className="space-y-2">
+        <Label htmlFor="invoice-dossier-id">Dossier patient</Label>
+        <Input id="invoice-dossier-id" type="number" min="1" value={dossierId} onChange={(e) => setDossierId(e.target.value)} placeholder="Identifiant du dossier médical" />
+        <p className="text-xs text-muted-foreground">La facture sera refusée si ce dossier n’appartient pas au patient sélectionné.</p>
+      </div>
+      <div className="space-y-2">
             <Label>Lignes</Label>
             {lignes.map((ligne, i) => (
               <div key={i} className="flex gap-2 items-start">
@@ -635,15 +628,39 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
   invoice: Invoice | null; onOpenChange: () => void; onPaid: () => void;
 }) {
   const [mode, setMode] = useState('especes');
+  const [montant, setMontant] = useState('');
+  const [reference, setReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const currency = useCurrency();
   const [isSaving, setIsSaving] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const invoiceCurrency = getInvoiceCurrency(invoice, currency);
+
+  useEffect(() => {
+    setPaymentConfirmed(false);
+    const balance = invoice?.solde ?? Math.max(0, Number(invoice?.total_ttc || 0) - Number(invoice?.montant_paye || 0));
+    setMontant(balance > 0 ? String(balance) : '');
+    setReference('');
+    setNotes('');
+  }, [invoice]);
 
   const handleConfirm = async () => {
     if (!invoice) return;
+    const amount = Number(montant);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error('Saisissez un montant de paiement valide');
+      return;
+    }
     setIsSaving(true);
     try {
-      await api.post(`/factures/${invoice.id}/payer`, { mode_paiement: mode });
-      toast.success('Facture marquée comme payée');
-      onOpenChange();
+      const response = await api.post(`/factures/${invoice.id}/paiements`, {
+        montant: amount,
+        mode,
+        reference: reference.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
+      setPaymentConfirmed(true);
+      toast.success(`Paiement enregistré — solde : ${response.data.solde}`);
       onPaid();
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Erreur lors du paiement');
@@ -657,8 +674,13 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Enregistrer le paiement</DialogTitle>
-          <DialogDescription>{invoice && `${invoice.numero_facture} — ${invoice.total_ttc} DT`}</DialogDescription>
+          <DialogDescription>{invoice && `${invoice.numero_facture} — ${formatMoney(invoice.total_ttc, invoiceCurrency)}`}</DialogDescription>
         </DialogHeader>
+        <div>
+          <Label htmlFor="montant">Montant à encaisser</Label>
+          <Input id="montant" type="number" min="0.001" step="0.001" value={montant} onChange={(e) => setMontant(e.target.value)} />
+          <p className="mt-1 text-xs text-muted-foreground">Le serveur refusera tout montant supérieur au solde réel.</p>
+        </div>
         <div>
           <Label htmlFor="mode">Mode de paiement</Label>
           <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
@@ -668,9 +690,24 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
             <option value="virement">Virement</option>
           </select>
         </div>
+        <div>
+          <Label htmlFor="reference">Référence (facultatif)</Label>
+          <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="TPE, chèque, virement…" />
+        </div>
+        <div>
+          <Label htmlFor="payment-notes">Note (facultatif)</Label>
+          <Textarea id="payment-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </div>
+        {paymentConfirmed ? (
+          <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
+            Paiement enregistré. La facture est maintenant marquée comme payée.
+          </div>
+        ) : null}
         <DialogFooter>
-          <Button variant="outline" onClick={onOpenChange}>Annuler</Button>
-          <Button onClick={handleConfirm} disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Confirmer'}</Button>
+          {!paymentConfirmed && <Button variant="outline" onClick={onOpenChange}>Annuler</Button>}
+          <Button onClick={paymentConfirmed ? onOpenChange : handleConfirm} disabled={isSaving}>
+            {isSaving ? <Spinner className="h-4 w-4" /> : paymentConfirmed ? 'Fermer' : 'Confirmer le paiement'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

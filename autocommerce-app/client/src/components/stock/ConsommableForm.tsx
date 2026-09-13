@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from 'sonner';
+import { extractErrorMessage } from '@/lib/errors';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -51,7 +52,7 @@ export function ConsommableForm({ open, onOpenChange, onCreated }: ConsommableFo
         prix_unitaire: '0'
       });
     } catch (err) {
-      toast.error('Erreur lors de la création du consommable');
+      toast.error(extractErrorMessage(err, 'Erreur lors de la création du consommable'));
     } finally {
       setIsSaving(false);
     }

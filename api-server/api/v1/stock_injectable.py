@@ -3,7 +3,7 @@ AutoCommerce Clinic — API Stock Injectables
 QR, barcode, scan, traçabilité, alertes
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
@@ -28,10 +28,15 @@ from services.tenant_scope import resolve_clinic_id
 from services.stock_injectable import (
     get_lot_by_scan,
     register_usage,
+    register_reception,
     check_stock_alerts,
     get_tracabilite_patient,
     get_stock_dashboard,
+    get_lot_mouvements,
+    get_recent_mouvements,
+    get_mouvements_filtered,
 )
+from services.stock_audit_pdf import generate_injectables_mouvements_pdf
 
 router = APIRouter(prefix="/injectables", tags=["stock-injectables"])
 
@@ -80,6 +85,18 @@ async def _resolve_praticien_id_for_usage(
 
 # ── Schémas Pydantic ─────────────────────────────────────
 
+class ProduitCreate(BaseModel):
+    nom: str = Field(..., min_length=2, max_length=200)
+    fabricant: Optional[str] = None
+    categorie: str = Field(default="autre", max_length=50)
+    unite: str = Field(default="unité", min_length=1, max_length=20)
+    reference_fabricant: Optional[str] = None
+    prix_achat: Decimal = Field(default=Decimal("0.000"), ge=0)
+    prix_vente: Decimal = Field(default=Decimal("0.000"), ge=0)
+    stock_minimum: Decimal = Field(default=Decimal("0.00"), ge=0)
+    stock_alerte: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+
 class LotCreate(BaseModel):
     produit_id: int
     numero_lot: str = Field(..., min_length=3, max_length=100)
@@ -104,9 +121,28 @@ class UsageRequest(BaseModel):
     quantite: Decimal = Field(..., ge=Decimal("0.001"))
     unite: str = Field(..., min_length=1, max_length=20)
     dossier_id: Optional[int] = None
+    episode_id: Optional[int] = None
+    intervention_id: Optional[int] = None
     type_injection: Optional[str] = None
     date_injection: Optional[datetime] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_identifier(self):
+        if self.lot_id is None and not self.code:
+            raise ValueError("Fournir soit code soit lot_id")
+        return self
+
+
+class ReceptionRequest(BaseModel):
+    code: Optional[str] = Field(default=None, min_length=1)
+    lot_id: Optional[int] = Field(default=None, ge=1)
+    quantite: Decimal = Field(..., ge=Decimal("0.001"))
+    date_expiration: Optional[str] = None  # YYYY-MM-DD
+    fournisseur: Optional[str] = None
+    prix_achat_lot: Optional[Decimal] = None
+    motif: Optional[str] = None
+    reference: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_identifier(self):
@@ -134,11 +170,41 @@ class LotResponse(BaseModel):
 
 # ── Routes ─────────────────────────────────────────────────
 
+@router.get("/produits", response_model=List[dict])
+async def list_products(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+):
+    from models.database import ProduitInjectable
+    result = await db.execute(
+        select(ProduitInjectable).where(
+            ProduitInjectable.clinic_id == resolve_clinic_id(current_user.get("clinic_id")),
+            ProduitInjectable.is_active,
+        ).order_by(ProduitInjectable.nom)
+    )
+    return [{"id": p.id, "nom": p.nom, "fabricant": p.fabricant, "categorie": p.categorie, "unite": p.unite} for p in result.scalars().all()]
+
+
+@router.post("/produits", response_model=dict, status_code=201)
+async def create_product(
+    data: ProduitCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
+):
+    from models.database import ProduitInjectable
+    clinic_id = resolve_clinic_id(current_user.get("clinic_id"))
+    product = ProduitInjectable(clinic_id=clinic_id, **data.model_dump())
+    db.add(product)
+    await db.commit()
+    await db.refresh(product)
+    return {"id": product.id, "nom": product.nom, "fabricant": product.fabricant, "categorie": product.categorie, "unite": product.unite}
+
+
 @router.post("/lots", response_model=dict)
 async def create_lot(
     data: LotCreate,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
 ):
     """Crée un lot et génère automatiquement QR + barcode."""
     from sqlalchemy import select
@@ -219,12 +285,46 @@ async def create_lot(
     }
 
 
+@router.get("/lots", response_model=List[dict])
+async def list_available_lots(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE, RoleEnum.ADMIN)),
+):
+    """Retourne les lots disponibles pour une attribution clinique au patient."""
+    from models.database import LotInjectable, ProduitInjectable, StatutLot
+    result = await db.execute(
+        select(LotInjectable, ProduitInjectable)
+        .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
+        .where(
+            LotInjectable.clinic_id == resolve_clinic_id(current_user.get("clinic_id")),
+            ProduitInjectable.clinic_id == resolve_clinic_id(current_user.get("clinic_id")),
+            LotInjectable.quantite_restante > 0,
+            LotInjectable.statut.notin_([StatutLot.EPUISE.value, StatutLot.EXPIRE.value, StatutLot.RETIRE.value]),
+            LotInjectable.date_expiration >= datetime.utcnow().date(),
+        )
+        .order_by(ProduitInjectable.nom, LotInjectable.date_expiration)
+    )
+    return [
+        {
+            "lot_id": lot.id,
+            "produit_id": produit.id,
+            "produit_nom": produit.nom,
+            "fabricant": produit.fabricant,
+            "numero_lot": lot.numero_lot,
+            "quantite_restante": float(lot.quantite_restante),
+            "unite": produit.unite,
+            "date_expiration": lot.date_expiration.isoformat(),
+        }
+        for lot, produit in result.all()
+    ]
+
+
 @router.get("/lots/{lot_id}/label")
 async def get_lot_label(
     lot_id: int,
     label_format: str = Query("50x30", pattern="^(a4|50x30|40x25|60x40)$"),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
 ):
     """Télécharge l'étiquette PDF d'un lot."""
     pdf_bytes = await generate_lot_label(
@@ -243,7 +343,7 @@ async def get_lot_label_batch(
     lot_ids: str = Query(..., description="IDs séparés par virgule, ex: 1,2,3"),
     label_format: str = Query("50x30", pattern="^(a4|50x30|40x25|60x40)$"),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
 ):
     """Télécharge un PDF multi-étiquettes."""
     ids = [int(x.strip()) for x in lot_ids.split(",") if x.strip().isdigit()]
@@ -266,7 +366,7 @@ async def get_lot_label_batch(
 async def scan_code(
     data: ScanRequest,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE, RoleEnum.ADMIN)),
 ):
     """Scan un code (QR ou barcode) et retourne les infos du lot."""
     try:
@@ -290,6 +390,160 @@ async def scan_code(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.post("/reception", response_model=dict)
+async def register_lot_reception(
+    data: ReceptionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+):
+    """Crédite le stock d'un lot existant depuis un scan (réception livraison).
+
+    Évolution « Ajouter du stock / Réception » : le scan retrouve le lot,
+    on ajoute la quantité reçue, et le mouvement est journalisé dans le
+    registre d'audit (type_mouvement=reception)."""
+    lot_id = data.lot_id
+
+    if lot_id is None:
+        decoded = decode_scan(data.code)
+        if decoded["type"] == "qr_json":
+            lot_id = decoded["data"].get("lot_id")
+        elif decoded["type"] == "barcode":
+            from models.database import LotInjectable
+            result = await db.execute(
+                select(LotInjectable).where(
+                    LotInjectable.numero_lot == decoded["numero_lot"],
+                    LotInjectable.clinic_id == resolve_clinic_id(current_user.get("clinic_id")),
+                )
+            )
+            lot = result.scalar_one_or_none()
+            if lot:
+                lot_id = lot.id
+
+        if not lot_id:
+            raise HTTPException(status_code=404, detail="Lot non trouvé depuis le scan")
+
+    from datetime import date as _date
+    try:
+        mouvement = await register_reception(
+            lot_id=lot_id,
+            quantite=data.quantite,
+            db=db,
+            utilisateur_id=int(current_user.get("id")) if current_user.get("id") else None,
+            motif=data.motif,
+            reference=data.reference,
+            date_expiration=_date.fromisoformat(data.date_expiration) if data.date_expiration else None,
+            fournisseur=data.fournisseur,
+            prix_achat_lot=data.prix_achat_lot,
+            clinic_id=resolve_clinic_id(current_user.get("clinic_id")),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    from models.database import LotInjectable as _LotModel
+    lot_row = (await db.execute(select(_LotModel).where(_LotModel.id == lot_id))).scalar_one_or_none()
+
+    return {
+        "mouvement_id": mouvement.id,
+        "lot_id": lot_id,
+        "quantite_recue": float(data.quantite),
+        "quantite_restante": float(lot_row.quantite_restante) if lot_row else None,
+        "message": "Réception enregistrée — stock crédité",
+    }
+
+
+@router.get("/mouvements", response_model=List[dict])
+async def list_recent_mouvements(
+    limit: int = Query(12, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(
+        RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE,
+        RoleEnum.ASSISTANTE, RoleEnum.ADMIN,
+    )),
+):
+    """Registre d'audit : derniers mouvements (réceptions, injections, ajustements)."""
+    return await get_recent_mouvements(
+        db, clinic_id=resolve_clinic_id(current_user.get("clinic_id")), limit=limit
+    )
+
+
+@router.get("/mouvements/export-pdf")
+async def export_mouvements_pdf(
+    date_debut: Optional[str] = Query(None, description="Filtre : date début (YYYY-MM-DD)"),
+    date_fin: Optional[str] = Query(None, description="Filtre : date fin (YYYY-MM-DD)"),
+    lot_id: Optional[int] = Query(None, ge=1, description="Filtre : lot précis"),
+    type_mouvement: Optional[str] = Query(
+        None, pattern="^(reception|injection|ajustement)$",
+        description="Filtre : type de mouvement",
+    ),
+    limit: int = Query(2000, ge=1, le=5000),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+):
+    """Export PDF imprimable du registre des mouvements (audit V2.3).
+
+    Même RBAC que la réception : réservé aux rôles gestionnaires
+    (Admin, Directrice, Assistante). Filtres optionnels par dates,
+    lot et type de mouvement.
+    """
+    clinic_id = resolve_clinic_id(current_user.get("clinic_id"))
+
+    def _parse(v: Optional[str], nom: str):
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"{nom} invalide (format YYYY-MM-DD attendu)")
+
+    d_debut = _parse(date_debut, "date_debut")
+    d_fin = _parse(date_fin, "date_fin")
+
+    mouvements = await get_mouvements_filtered(
+        db,
+        clinic_id=clinic_id,
+        date_debut=d_debut,
+        date_fin=d_fin,
+        lot_id=lot_id,
+        type_mouvement=type_mouvement,
+        limit=limit,
+    )
+
+    from services.branding import get_branding_context
+    clinic = await get_branding_context(db, clinic_id=clinic_id)
+
+    pdf_bytes = generate_injectables_mouvements_pdf(
+        mouvements,
+        clinic,
+        filters={
+            "date_debut": date_debut or None,
+            "date_fin": date_fin or None,
+            "lot_id": lot_id,
+            "type": type_mouvement,
+        },
+    )
+    filename = f"registre_mouvements_injectables_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/lots/{lot_id}/mouvements", response_model=List[dict])
+async def list_lot_mouvements(
+    lot_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(
+        RoleEnum.DIRECTRICE, RoleEnum.MEDECIN, RoleEnum.ESTHETICIENNE,
+        RoleEnum.ASSISTANTE, RoleEnum.ADMIN,
+    )),
+):
+    """Historique des mouvements d'un lot précis."""
+    return await get_lot_mouvements(
+        lot_id, db, clinic_id=resolve_clinic_id(current_user.get("clinic_id"))
+    )
+
+
 @router.post("/utilisation", response_model=dict)
 async def register_lot_usage(
     data: UsageRequest,
@@ -298,7 +552,6 @@ async def register_lot_usage(
         RoleEnum.DIRECTRICE,
         RoleEnum.MEDECIN,
         RoleEnum.ESTHETICIENNE,
-        RoleEnum.ASSISTANTE,
         RoleEnum.ADMIN,
     )),
 ):
@@ -343,10 +596,15 @@ async def register_lot_usage(
             date_injection=data.date_injection,
             notes=data.notes,
             clinic_id=resolve_clinic_id(current_user.get("clinic_id")),
+            episode_id=data.episode_id,
+            intervention_id=data.intervention_id,
         )
         return {
             "utilisation_id": utilisation.id,
             "lot_id": lot_id,
+            "dossier_id": utilisation.dossier_id,
+            "episode_id": utilisation.episode_id,
+            "intervention_id": utilisation.intervention_id,
             "quantite_utilisee": float(data.quantite),
             "unite": data.unite,
             "message": "Utilisation enregistrée avec succès",

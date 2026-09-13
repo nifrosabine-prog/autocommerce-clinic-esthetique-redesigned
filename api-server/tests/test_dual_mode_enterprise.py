@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from cryptography.fernet import Fernet
 
 from config import Settings, _validate_production_secrets
 from core.llm_budget import LLMBudgetExceeded, reserve_budget
@@ -21,9 +22,12 @@ def _production_settings(**overrides) -> Settings:
         social_webhook_clinic_id=None,
         cors_origins="http://clinic.local",
         secret_key="S" * 64,
-        fernet_key="fernet-key-" + "a" * 40,
-        photo_encryption_key="photo-key-" + "b" * 40,
-        mfa_encryption_key="mfa-key-" + "c" * 40,
+        # Correctif AUD-001 : la validation exige désormais des clés Fernet
+        # au format réel (44 caractères base64 url-safe) — on génère de
+        # vraies clés distinctes au lieu de chaînes factices.
+        fernet_key=Fernet.generate_key().decode(),
+        photo_encryption_key=Fernet.generate_key().decode(),
+        mfa_encryption_key=Fernet.generate_key().decode(),
         database_url="postgresql+asyncpg://app:strong-db-pass@postgres:5432/clinic",
         redis_url="redis://:strong-redis-pass@redis:6379/0",
         llm_enabled=False,

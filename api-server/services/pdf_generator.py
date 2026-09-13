@@ -22,6 +22,8 @@ async def generate_invoice_pdf(facture: Facture, patient: Patient, clinic: dict)
     
     elements = []
     
+    currency_symbol = facture.currency_symbol or clinic.get('currency', {}).get('currency_symbol', 'DT')
+
     # Header
     header_style = ParagraphStyle('HeaderStyle', parent=styles['Heading1'], alignment=1, fontSize=20, spaceAfter=20)
     title = "FACTURE" if facture.statut != "brouillon" else "DEVIS"
@@ -53,20 +55,20 @@ async def generate_invoice_pdf(facture: Facture, patient: Patient, clinic: dict)
         total_ligne = prix * qte
         table_data.append([
             ligne.get('description', 'Sans description'),
-            f"{prix:.2f} DT",
+            f"{prix:.2f} {currency_symbol}",
             str(qte),
-            f"{total_ligne:.2f} DT"
+            f"{total_ligne:.2f} {currency_symbol}"
         ])
     
     # Totaux
-    table_data.append(['', '', 'Sous-total HT', f"{facture.sous_total:.2f} DT"])
+    table_data.append(['', '', 'Sous-total HT', f"{facture.sous_total:.2f} {currency_symbol}"])
     if facture.remise_globale_pct > 0:
         remise_montant = facture.sous_total * (facture.remise_globale_pct / Decimal("100"))
-        table_data.append(['', '', f"Remise ({facture.remise_globale_pct}%)", f"-{remise_montant:.2f} DT"])
+        table_data.append(['', '', f"Remise ({facture.remise_globale_pct}%)", f"-{remise_montant:.2f} {currency_symbol}"])
     
     tva_pct = (facture.taux_tva * 100).quantize(Decimal("1"))
-    table_data.append(['', '', f"TVA ({tva_pct}%)", f"{facture.montant_tva:.2f} DT"])
-    table_data.append(['', '', 'TOTAL TTC', f"{facture.total_ttc:.2f} DT"])
+    table_data.append(['', '', f"TVA ({tva_pct}%)", f"{facture.montant_tva:.2f} {currency_symbol}"])
+    table_data.append(['', '', 'TOTAL TTC', f"{facture.total_ttc:.2f} {currency_symbol}"])
     
     items_table = Table(table_data, colWidths=[9*cm, 3*cm, 1*cm, 3*cm])
     items_table.setStyle(TableStyle([

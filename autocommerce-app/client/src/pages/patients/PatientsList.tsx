@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { api } from '@/lib/api';
+import { api, downloadCsv } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
-import { Plus, Search, User, Phone, ShieldOff, Pencil, Eye } from 'lucide-react';
+import { Download, Plus, Search, Phone, ShieldOff, Pencil, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
@@ -30,15 +31,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-export default function PatientsList() {
+export default function PatientsList({ mode = 'patients' }: { mode?: 'patients' | 'medical-record' }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
+  const isMedicalRecordIndex = mode === 'medical-record';
   const [, setLocation] = useLocation();
   const canAnonymize = user?.role === 'directrice' || user?.role === 'admin';
+  const canCreatePatient = ['directrice', 'medecin', 'estheticienne', 'assistante', 'admin'].includes(user?.role || '');
   const [isLoading, setIsLoading] = useState(true);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [anonymizingId, setAnonymizingId] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
@@ -47,12 +52,23 @@ export default function PatientsList() {
   }, []);
 
   useEffect(() => {
-    const filtered = patients.filter(
-      (p) =>
-        p.nom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.prenom.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.telephone.includes(searchQuery)
-    );
+    // Correctif 2026-09-11 (audit AUD-002 suite) : recherche par nom OU
+    // téléphone fonctionnelle pour tous les rôles. Le téléphone est comparé
+    // en chiffres uniquement (« 20 000 001 », « +216… », « 20000001 » ou
+    // « 21620000001 » trouvent tous le même patient) et whatsapp_phone est
+    // inclus s'il est renvoyé par l'API.
+    const q = searchQuery.trim().toLowerCase();
+    const qDigits = searchQuery.replace(/\D/g, '');
+    const filtered = patients.filter((p) => {
+      if (!q && !qDigits) return true;
+      const matchText =
+        (p.nom || '').toLowerCase().includes(q) ||
+        (p.prenom || '').toLowerCase().includes(q);
+      const telDigits = (p.telephone || '').replace(/\D/g, '');
+      const waDigits = ((p as unknown as { whatsapp_phone?: string }).whatsapp_phone || '').replace(/\D/g, '');
+      const matchPhone = qDigits.length > 0 && (telDigits.includes(qDigits) || waDigits.includes(qDigits));
+      return matchText || matchPhone;
+    });
     setFilteredPatients(filtered);
   }, [searchQuery, patients]);
 
@@ -66,7 +82,7 @@ export default function PatientsList() {
       // Ne jamais conserver des données cliniques d’une session/clinique précédente
       // lorsqu’un rechargement privé est refusé ou échoue.
       setPatients([]);
-      toast.error('Erreur lors du chargement des patients');
+      toast.error(t('patients.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -76,12 +92,27 @@ export default function PatientsList() {
     try {
       setAnonymizingId(patient.id);
       await api.delete(`/patients/${patient.id}/rgpd`);
-      toast.success('Patient anonymisé');
+      toast.success(t('patients.anonymizeSuccess'));
       loadPatients();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'anonymisation");
+      toast.error(err.response?.data?.detail || t('patients.anonymizeError'));
     } finally {
       setAnonymizingId(null);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      setIsExporting(true);
+      const endpoint = searchQuery.trim()
+        ? `/patients/export.csv?search=${encodeURIComponent(searchQuery.trim())}`
+        : '/patients/export.csv';
+      await downloadCsv(endpoint, 'patients.csv');
+      toast.success(t('patients.exportSuccess'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || t('patients.exportError'));
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -100,24 +131,32 @@ export default function PatientsList() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Patients</h1>
-            <p className="text-muted-foreground mt-1">{patients.length} patient(s) enregistré(s)</p>
+            <h1 className="text-3xl font-bold">{isMedicalRecordIndex ? t('patients.medicalRecordsTitle') : t('common.patients')}</h1>
+            <p className="text-muted-foreground mt-1">{isMedicalRecordIndex ? t('patients.medicalRecordsCount', { count: patients.length }) : t('patients.registeredCount', { count: patients.length })}</p>
           </div>
-          <Button onClick={() => { setEditingPatient(null); setFormOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nouveau patient
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleExportCsv} disabled={isExporting}>
+              <Download className="w-4 h-4 mr-2" />
+              {isExporting ? t('patients.exporting') : t('patients.exportCsv')}
+            </Button>
+            {canCreatePatient && (
+              <Button onClick={() => { setEditingPatient(null); setFormOpen(true); }}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('patients.newPatient')}
+              </Button>
+            )}
+          </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Rechercher</CardTitle>
+            <CardTitle className="text-sm">{t('common.search')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <Search className="w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Rechercher par nom, prénom ou téléphone..."
+                placeholder={t('patients.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1"
@@ -129,18 +168,18 @@ export default function PatientsList() {
         <Card>
           <CardContent className="pt-6">
             {filteredPatients.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucun patient trouvé</p>
+              <p className="text-center text-muted-foreground py-8">{t('patients.no_patient_found')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nom</TableHead>
-                      <TableHead>Prénom</TableHead>
-                      <TableHead>Téléphone</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Inscription</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>{t('patients.name')}</TableHead>
+                      <TableHead>{t('patients.firstName')}</TableHead>
+                      <TableHead>{t('patients.phone')}</TableHead>
+                      <TableHead>{t('patients.email')}</TableHead>
+                      <TableHead>{t('patients.registrationDate')}</TableHead>
+                      <TableHead>{t('patients.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -165,10 +204,10 @@ export default function PatientsList() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setLocation(`/patients/${patient.id}`)}
+                              onClick={() => setLocation(isMedicalRecordIndex ? `/medical-record/${patient.id}` : `/patients/${patient.id}`)}
                             >
                               <Eye className="w-4 h-4 mr-1" />
-                              Voir
+                              {isMedicalRecordIndex ? t('patients.openFile') : t('patients.view')}
                             </Button>
                             <Button
                               variant="ghost"
@@ -176,7 +215,7 @@ export default function PatientsList() {
                               onClick={() => { setEditingPatient(patient); setFormOpen(true); }}
                             >
                               <Pencil className="w-4 h-4 mr-1" />
-                              Éditer
+                              {t('common.edit')}
                             </Button>
                             {canAnonymize && (
                               <AlertDialog>
@@ -185,28 +224,28 @@ export default function PatientsList() {
                                     variant="ghost"
                                     size="sm"
                                     className="text-destructive hover:text-destructive"
+                                    aria-label={t('patients.deleteAnonymizeAria', { name: `${patient.prenom} ${patient.nom}` })}
+                                    title={t('patients.deleteAnonymizeAria', { name: `${patient.prenom} ${patient.nom}` })}
                                     disabled={anonymizingId === patient.id}
                                   >
                                     <ShieldOff className="w-4 h-4 mr-1" />
-                                    Anonymiser
+                                    {t('common.delete')}
                                   </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
-                                    <AlertDialogTitle>Anonymiser ce patient ?</AlertDialogTitle>
+                                    <AlertDialogTitle>{t('patients.anonymizeTitle')}</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      Cette action est irréversible. Toutes les données
-                                      identifiantes de {patient.prenom} {patient.nom} seront
-                                      définitivement supprimées, conformément au RGPD.
+                                      {t('patients.anonymizeWarning', { name: `${patient.prenom} ${patient.nom}` })}
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
-                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                    <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                                     <AlertDialogAction
                                       onClick={() => handleAnonymize(patient)}
                                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
-                                      Confirmer l'anonymisation
+                                      {t('patients.confirmAnonymize')}
                                     </AlertDialogAction>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>

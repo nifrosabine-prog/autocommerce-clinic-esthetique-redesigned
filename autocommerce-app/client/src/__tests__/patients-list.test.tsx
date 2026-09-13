@@ -6,6 +6,38 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      const translations: Record<string, string> = {
+        "common.patients": "Patients",
+        "common.search": "Rechercher",
+        "common.edit": "Modifier",
+        "common.delete": "Supprimer",
+        "common.cancel": "Annuler",
+        "patients.registeredCount": `${values?.count ?? 0} patient(s) enregistré(s)`,
+        "patients.searchPlaceholder": "Rechercher par nom, prénom ou téléphone...",
+        "patients.no_patient_found": "Aucun patient trouvé",
+        "patients.name": "Nom",
+        "patients.firstName": "Prénom",
+        "patients.phone": "Téléphone",
+        "patients.email": "Email",
+        "patients.registrationDate": "Date d'inscription",
+        "patients.actions": "Actions",
+        "patients.newPatient": "Nouveau patient",
+        "patients.loadError": "Erreur lors du chargement des patients",
+        "patients.deleteAnonymizeAria": `Supprimer / anonymiser ${values?.name ?? ""}`,
+        "patients.anonymizeTitle": "Anonymiser ce patient ?",
+        "patients.anonymizeWarning": `Le patient ${values?.name ?? ""} sera anonymisé.`,
+        "patients.confirmAnonymize": "Confirmer l'anonymisation",
+        "patients.anonymizeSuccess": "Patient anonymisé",
+        "patients.anonymizeError": "Erreur lors de l'anonymisation",
+      };
+      return translations[key] ?? key;
+    },
+  }),
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: vi.fn() }));
 vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: React.ReactNode }) => <div data-testid="layout">{children}</div>,

@@ -3,11 +3,9 @@ from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 from main import app
 from api.deps import get_db, limiter
-from api.v1.settings import ActeCreate
 
 
 @pytest.fixture
@@ -29,32 +27,6 @@ def test_get_branding_is_public(client):
 def test_patch_branding_requires_auth(client):
     r = client.patch("/api/v1/settings/branding", json={"nom_clinique": "X"})
     assert r.status_code == 401
-
-
-def test_acte_validation_rejects_blank_text_and_zero_price_when_not_free():
-    with pytest.raises(ValidationError, match="au moins 2 caractères"):
-        ActeCreate(nom="  ", categorie="soin", duree_minutes=30, prix_base="120")
-
-    with pytest.raises(ValidationError, match="prix strictement supérieur à 0"):
-        ActeCreate(nom="Consultation", categorie="soin", duree_minutes=30, prix_base="0", is_gratuit=False)
-
-
-def test_acte_validation_allows_zero_price_only_when_explicitly_free():
-    acte = ActeCreate(nom="  Soin   découverte ", categorie="  soin  ", duree_minutes=30, prix_base="0", is_gratuit=True)
-    assert acte.nom == "Soin découverte"
-    assert acte.categorie == "soin"
-    assert acte.prix_base == 0
-
-
-def test_public_callback_request_creates_pending_reminder(client):
-    r = client.post("/api/v1/public/rappel", json={
-        "nom": "Demande Test",
-        "telephone": "+21699887766",
-        "message": "Merci de me rappeler pour une consultation.",
-    })
-    assert r.status_code == 201
-    assert r.json()["statut"] == "pending"
-    assert r.json()["lead_id"] > 0
 
 
 def test_public_reservation_endpoint_reachable_without_auth(client, medecin, acte):

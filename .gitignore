@@ -18,6 +18,7 @@ htmlcov/
 # Node / frontend
 node_modules/
 autocommerce-app/dist/
+api-server/web-dist/
 coverage/
 playwright-report/
 test-results/

@@ -12,8 +12,9 @@ from middleware.clinic_rbac import require_role
 from models.database import RoleEnum
 from services.factures import create_facture, marquer_payee, annuler_facture, list_factures
 from services.pdf_generator import generate_invoice_pdf
-from sqlalchemy import select
+from sqlalchemy import func, select
 from models.database import Facture, Patient, AuditLogFinancial
+from models.episode_core import Paiement
 
 router = APIRouter(prefix="/factures", tags=["factures"])
 
@@ -27,7 +28,7 @@ class LigneFacture(BaseModel):
 class FactureCreate(BaseModel):
     patient_id: int
     rdv_id: Optional[int] = None
-    dossier_id: Optional[int] = None
+    dossier_id: int
     actes: list[LigneFacture] = []
     produits: list[LigneFacture] = []
     taux_tva: Decimal = Decimal("0.190")
@@ -75,6 +76,7 @@ async def create_facture_route(
         code = status.HTTP_409_CONFLICT if "déjà" in message or "rattaché" in message else status.HTTP_404_NOT_FOUND
         raise HTTPException(status_code=code, detail=message)
     return {"id": facture.id, "numero_facture": facture.numero_facture, "total_ttc": facture.total_ttc,
+            "currency_code": facture.currency_code or "TND", "currency_symbol": facture.currency_symbol or "DT",
             "statut": facture.statut, "dossier_id": facture.dossier_id}
 
 
@@ -99,9 +101,36 @@ async def list_factures_route(
         statut=statut, skip=skip, limit=limit,
     )
     response.headers["X-Total-Count"] = str(total)
-    return [{"id": f.id, "numero_facture": f.numero_facture, "patient_id": f.patient_id,
-             "dossier_id": f.dossier_id, "total_ttc": f.total_ttc, "statut": f.statut,
-             "date_emission": f.date_emission} for f in factures]
+    facture_ids = [f.id for f in factures]
+    paid_by_invoice = {}
+    if facture_ids:
+        paid_rows = await db.execute(
+            select(Paiement.facture_id, func.coalesce(func.sum(Paiement.montant), 0))
+            .where(
+                Paiement.clinic_id == current_user["clinic_id"],
+                Paiement.facture_id.in_(facture_ids),
+                Paiement.statut.notin_(["annule", "rembourse"]),
+            )
+            .group_by(Paiement.facture_id)
+        )
+        paid_by_invoice = {invoice_id: amount for invoice_id, amount in paid_rows.all()}
+    return [{
+        "id": f.id,
+        "numero_facture": f.numero_facture,
+        "patient_id": f.patient_id,
+        "dossier_id": f.dossier_id,
+        "sous_total": f.sous_total,
+        "remise_globale_pct": f.remise_globale_pct,
+        "taux_tva": f.taux_tva,
+        "montant_tva": f.montant_tva,
+        "total_ttc": f.total_ttc,
+        "montant_paye": paid_by_invoice.get(f.id, Decimal("0")),
+        "solde": max(Decimal("0"), Decimal(str(f.total_ttc)) - Decimal(str(paid_by_invoice.get(f.id, Decimal("0"))))),
+        "currency_code": f.currency_code or "TND",
+        "currency_symbol": f.currency_symbol or "DT",
+        "statut": f.statut,
+        "date_emission": f.date_emission,
+    } for f in factures]
 
 
 @router.post("/{facture_id}/payer")

@@ -58,6 +58,8 @@ async def list_commissions_route(
             "validateur_1_nom": noms.get(c.validee_par_id) if c.validee_par_id else None,
             "validateur_2_id": c.validee_par_id_2,
             "validateur_2_nom": noms.get(c.validee_par_id_2) if c.validee_par_id_2 else None,
+            "validee_par_id_2": c.validee_par_id_2,
+            "validated_at_2": c.validated_at_2,
         }
         for c in commissions
     ]

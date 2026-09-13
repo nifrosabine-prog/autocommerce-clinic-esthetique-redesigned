@@ -13,11 +13,11 @@ from fastapi import APIRouter
 
 from api.v1 import (
     agenda_clinic, assistant, auth, booking_requests, business_intelligence, commissions, copilote_crm, dashboard_ia,
-    depenses_clinic, dossiers_medicaux, equipe, factures, fidelite, mfa, omnicanal, patients, recrutement,
-    settings as settings_router, social, stock_injectable, workflow_engine, consommables,
+    depenses_clinic, dossiers_medicaux, consultations_medicales, patient_medical_facts, prescriptions_medicales, documents_medicaux, timeline_patient_global, exports_patient, audit_medical, equipe, factures, fidelite, mfa, omnicanal, patients, recrutement,
+    settings as settings_router, public_chat, public_recruitment, recruitment_inbound, absences_praticiens, remplacements_rdv, social, stock_injectable, stock_alerts, workflow_engine, consommables, taches_internes,
     teleconsultation, parrainage, simulation_ia,
             assistant_ia, bi_insights, workflow_extra, qms, scribe_ia, delegues, users,
-            salles, pointage, super_admin, clinical_operations,
+            salles, pointage, super_admin, clinical_operations, rbac, accueil, workspace, episodes, devis, paiements_episode, notes_episode,
 
 )
 
@@ -32,12 +32,23 @@ def _include_private_routers(target: APIRouter) -> None:
     target.include_router(commissions.router)
     target.include_router(fidelite.router)
     target.include_router(recrutement.router)
+    target.include_router(absences_praticiens.router)
+    target.include_router(taches_internes.router)
+    target.include_router(remplacements_rdv.router)
     target.include_router(social.router)
     target.include_router(settings_router.router)
     target.include_router(agenda_clinic.router)
     target.include_router(depenses_clinic.router)
     target.include_router(dossiers_medicaux.router)
+    target.include_router(consultations_medicales.router)
+    target.include_router(patient_medical_facts.router)
+    target.include_router(prescriptions_medicales.router)
+    target.include_router(documents_medicaux.router)
+    target.include_router(timeline_patient_global.router)
+    target.include_router(exports_patient.router)
+    target.include_router(audit_medical.router)
     target.include_router(stock_injectable.router)
+    target.include_router(stock_alerts.router)
     target.include_router(consommables.router)
     target.include_router(teleconsultation.router)
     target.include_router(parrainage.router)
@@ -60,6 +71,13 @@ def _include_private_routers(target: APIRouter) -> None:
     target.include_router(pointage.router)
     target.include_router(super_admin.router)
     target.include_router(clinical_operations.router)
+    target.include_router(rbac.router)
+    target.include_router(accueil.router)
+    target.include_router(workspace.router)
+    target.include_router(episodes.router)
+    target.include_router(devis.router)
+    target.include_router(paiements_episode.router)
+    target.include_router(notes_episode.router)
 
 
 # Cœur privé canonique et contrat historique de compatibilité.
@@ -72,10 +90,16 @@ _include_private_routers(api_router)
 # Public Gateway : seul le sous-routeur explicitement public est monté.
 public_gateway_router = APIRouter(prefix="/api/public")
 public_gateway_router.include_router(settings_router.public_router)
+public_gateway_router.include_router(public_chat.router)
+public_gateway_router.include_router(public_recruitment.router)
+public_gateway_router.include_router(recruitment_inbound.router)
 
 # Compatibilité descendante pour les landing pages déjà configurées.
 legacy_public_gateway_router = APIRouter(prefix="/api/v1/public")
 legacy_public_gateway_router.include_router(settings_router.public_router)
+legacy_public_gateway_router.include_router(public_chat.router)
+legacy_public_gateway_router.include_router(public_recruitment.router)
+legacy_public_gateway_router.include_router(recruitment_inbound.router)
 
 # L’application monte ces trois arbres séparément ; public et privé ne partagent
 # aucun routeur métier sensible.

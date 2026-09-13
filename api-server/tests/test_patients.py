@@ -119,3 +119,159 @@ async def test_anonymize_patient_strips_identifying_data(db, patient):
 async def test_anonymize_unknown_patient_raises(db):
     with pytest.raises(ValueError, match="non trouvé"):
         await anonymize_patient(999999, db)
+
+
+@pytest.mark.asyncio
+async def test_create_patient_allows_assistante_without_sensitive_fields(db):
+    result = await create_patient(
+        {"nom": "Accueil", "prenom": "Audit", "telephone": "+21629999999"},
+        db,
+        {"role": "assistante", "id": 1, "clinic_id": 1},
+    )
+    assert result["nom"] == "Accueil"
+    assert "allergies" not in result
+    assert "antecedents_medicaux" not in result
+
+
+# ── Correctif 2026-09-11 : recherche par nom/téléphone pour tous les rôles ──
+
+@pytest.mark.asyncio
+async def test_list_patients_search_by_partial_phone_for_every_role(db, patient):
+    """Téléphone du fixture : +21620000000 — une recherche sur un fragment
+    (« 20000000 ») doit retrouver la patiente pour chaque rôle autorisé,
+    y compris l'assistante et l'esthéticienne."""
+    for role in ("assistante", "medecin", "estheticienne", "directrice", "admin"):
+        results = await list_patients(
+            {"role": role, "id": 1, "clinic_id": 1}, db, search="20000000"
+        )
+        assert patient.id in [p["id"] for p in results], f"recherche en échec pour {role}"
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_by_partial_name_for_assistante(db, patient):
+    """« harb » (fragment casse-insensible de « Gharbi ») retrouve la patiente."""
+    results = await list_patients(
+        {"role": "assistante", "id": 1, "clinic_id": 1}, db, search="harb"
+    )
+    assert patient.id in [p["id"] for p in results]
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_covers_whatsapp_phone(db, patient):
+    """Le numéro WhatsApp distinct du téléphone principal est recherchable."""
+    patient.whatsapp_phone = "+21699999999"
+    await db.flush()
+    for role in ("medecin", "assistante"):
+        results = await list_patients(
+            {"role": role, "id": 1, "clinic_id": 1}, db, search="99999999"
+        )
+        assert patient.id in [p["id"] for p in results], f"recherche WhatsApp en échec pour {role}"
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_commercial_limited_to_own_patients(db):
+    """La recherche élargie ne modifie pas le périmètre du commercial : il ne
+    retrouve que ses propres patientes."""
+    commercial = Utilisateur(clinic_id=1, email="c9@clinic.tn", hashed_password="x",
+                              nom="X", prenom="Y", role=RoleEnum.COMMERCIAL.value)
+    db.add(commercial)
+    await db.flush()
+
+    mine = await create_patient({"nom": "Mienne", "prenom": "A", "telephone": "+21655500001",
+                                 "commercial_id": commercial.id}, db, {"role": "medecin", "id": 1, "clinic_id": 1})
+    await create_patient({"nom": "Autre", "prenom": "B", "telephone": "+21655500002"}, db,
+                         {"role": "medecin", "id": 1, "clinic_id": 1})
+
+    results = await list_patients(
+        {"role": "commercial", "id": commercial.id, "clinic_id": 1}, db, search="5550000"
+    )
+    ids = [p["id"] for p in results]
+    assert mine["id"] in ids
+    assert len(ids) == 1
+
+
+# ── Recette 2026-09-11 : recherche nom / téléphone ACTIVE pour tous les rôles ──
+# La recherche est filtrée côté serveur (jamais uniquement interface) ; le
+# téléphone est comparé en chiffres seuls, quel que soit le format saisi ou
+# stocké. Le périmètre (clinic_id, périmètre commercial) s'applique AVANT.
+
+ALL_SEARCH_ROLES = ("assistante", "medecin", "estheticienne", "directrice", "admin")
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_by_name_for_every_role(db, patient):
+    """« Gharbi Ines » est retrouvée par nom (partiel, casse-insensible) par
+    chaque rôle autorisé, y compris l'assistante et l'esthéticienne."""
+    for role in ALL_SEARCH_ROLES:
+        for fragment in ("harb", "GHARBI", "ines"):
+            results = await list_patients(
+                {"role": role, "id": 1, "clinic_id": 1}, db, search=fragment
+            )
+            assert patient.id in [p["id"] for p in results], (
+                f"recherche nom « {fragment} » en échec pour {role}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_by_phone_digits_ignores_format(db, patient):
+    """Le téléphone est cherché en chiffres seuls : « +216 20 000 000 »,
+    « 00216.20.000.000 » et « 20000000 » retrouvent la même patiente,
+    quel que soit le rôle — le format de saisie n'est jamais un obstacle."""
+    patient.telephone = "+216 20 000 000"
+    patient.whatsapp_phone = "00 216 20 000 000"
+    await db.flush()
+
+    for role in ALL_SEARCH_ROLES:
+        for fragment in ("20000000", "+216 20 000 000", "00216.20.000.000"):
+            results = await list_patients(
+                {"role": role, "id": 1, "clinic_id": 1}, db, search=fragment
+            )
+            assert patient.id in [p["id"] for p in results], (
+                f"recherche téléphone « {fragment} » en échec pour {role}"
+            )
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_by_name_returns_no_medical_fields_for_restricted_roles(db, patient):
+    """La recherche élargie aux rôles n'élargit PAS les champs médicaux :
+    l'assistante et l'esthéticienne retrouvent la patiente par nom ou
+    téléphone, mais restent soumises au masquage des champs sensibles."""
+    patient.commercial_id = 1  # le périmètre du commercial reste ses propres patientes
+    await db.flush()
+
+    for role in ("assistante", "commercial", "directrice"):
+        results = await list_patients(
+            {"role": role, "id": 1, "clinic_id": 1}, db, search="Gharbi"
+        )
+        assert patient.id in [p["id"] for p in results], f"recherche nom en échec pour {role}"
+        serialized = next(p for p in results if p["id"] == patient.id)
+        assert "allergies" not in serialized
+        assert "antecedents_medicaux" not in serialized
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_never_escapes_clinic_scope(db, patient):
+    """La recherche ne franchit jamais la frontière de la clinique : une
+    patiente homonyme d'une autre clinique n'est jamais renvoyée."""
+    other = Patient(
+        clinic_id=2, nom="Gharbi", prenom="Ines",
+        telephone="+21628888888", whatsapp_phone="+21628888888",
+    )
+    db.add(other)
+    await db.flush()
+
+    results = await list_patients({"role": "medecin", "id": 1, "clinic_id": 1}, db, search="Gharbi")
+    ids = [p["id"] for p in results]
+    assert patient.id in ids
+    assert other.id not in ids
+
+
+@pytest.mark.asyncio
+async def test_list_patients_search_is_case_insensitive_on_phone_with_country_code(db, patient):
+    """Recherche par indicatif pays partiel (« 216 ») : elle retrouve la
+    patiente car les chiffres du numéro sont recherchables en sous-chaîne."""
+    for role in ALL_SEARCH_ROLES:
+        results = await list_patients(
+            {"role": role, "id": 1, "clinic_id": 1}, db, search="216"
+        )
+        assert patient.id in [p["id"] for p in results], f"recherche 216 en échec pour {role}"

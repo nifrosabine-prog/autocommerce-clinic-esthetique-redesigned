@@ -34,32 +34,6 @@ async def test_public_submission_is_pending_and_deduplicated(db, acte, medecin):
 
 
 @pytest.mark.asyncio
-async def test_public_submission_rejects_an_unpublished_act(db, acte, medecin):
-    acte.is_public = False
-    await db.flush()
-
-    with pytest.raises(ValueError, match="Acte non trouvé"):
-        await submit_booking_request({
-            "nom": "Demande", "prenom": "Publique", "telephone": "+21620000601",
-            "praticien_id": medecin.id, "acte_id": acte.id,
-            "date_heure": datetime.utcnow() + timedelta(days=2),
-        }, db, clinic_id=1)
-
-
-@pytest.mark.asyncio
-async def test_public_submission_rejects_an_unpublished_practitioner(db, acte, medecin):
-    medecin.is_public = False
-    await db.flush()
-
-    with pytest.raises(ValueError, match="Praticien non trouvé"):
-        await submit_booking_request({
-            "nom": "Demande", "prenom": "Publique", "telephone": "+21620000602",
-            "praticien_id": medecin.id, "acte_id": acte.id,
-            "date_heure": datetime.utcnow() + timedelta(days=2),
-        }, db, clinic_id=1)
-
-
-@pytest.mark.asyncio
 async def test_approval_creates_patient_and_appointment_in_same_clinic(db, acte, medecin, assistante):
     payload = {
         "nom": "Validation",

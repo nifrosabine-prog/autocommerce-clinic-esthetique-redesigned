@@ -14,6 +14,8 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
   const [isDrawing, setIsDrawing] = useState(false);
   const [mode, setMode] = useState<'draw' | 'erase'>('draw');
   const [brushSize, setBrushSize] = useState(20);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [hasMark, setHasMark] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -28,6 +30,8 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
       const scale = displayWidth / img.width;
       canvas.width = displayWidth;
       canvas.height = img.height * scale;
+      setCanvasReady(true);
+      setHasMark(false);
 
       const ctx = canvas.getContext('2d');
       if (ctx) {
@@ -64,6 +68,7 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
     contextRef.current?.beginPath();
     contextRef.current?.moveTo(offsetX, offsetY);
     setIsDrawing(true);
+    setHasMark(true);
   };
 
   const draw = ({ nativeEvent }: React.MouseEvent | React.TouchEvent) => {
@@ -109,7 +114,7 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
 
   return (
     <div className="flex flex-col items-center gap-4 py-4">
-      <div className="relative border rounded-lg overflow-hidden bg-slate-200 shadow-inner" style={{ width: canvasRef.current?.width }}>
+      <div className="relative border rounded-lg overflow-hidden bg-slate-200 shadow-inner" style={{ width: canvasReady ? canvasRef.current?.width : undefined }}>
         {/* Image de fond (pour voir ce qu'on dessine) */}
         <img src={imageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-100" />
         
@@ -165,7 +170,7 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
 
       <div className="flex gap-3 w-full max-w-md pt-2">
         <Button variant="outline" className="flex-1" onClick={onCancel}>Annuler</Button>
-        <Button className="flex-1" onClick={handleExport}>Valider le marquage</Button>
+        <Button className="flex-1" onClick={handleExport} disabled={!canvasReady || !hasMark}>Valider le marquage</Button>
       </div>
     </div>
   );

@@ -344,9 +344,15 @@ class LLMClient:
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+        # GPT-5 n'accepte que sa température par défaut ; les autres
+        # modèles OpenAI conservent le réglage applicatif historique.
+        if not model.lower().startswith("gpt-5"):
+            payload["temperature"] = temperature
+        # Les modèles GPT-5 n'acceptent pas max_tokens et attendent
+        # max_completion_tokens. Les modèles GPT-4o restent sur max_tokens.
+        token_field = "max_completion_tokens" if model.lower().startswith("gpt-5") else "max_tokens"
+        payload[token_field] = max_tokens
         if response_format_json:
             payload["response_format"] = {"type": "json_object"}
         if stream:

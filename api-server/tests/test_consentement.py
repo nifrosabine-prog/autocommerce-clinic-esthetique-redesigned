@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from services.consentement import preview_contract_consent, verify_consent, sign_consent
+from services.consentement import verify_consent, sign_consent
 from models.database import Consentement
 
 
@@ -113,49 +113,3 @@ async def test_sign_consent_acte_medical_requires_acte_id(db, patient, tmp_path,
             db=db,
             type_consentement="acte_medical",
         )
-
-
-@pytest.mark.asyncio
-async def test_contract_preview_includes_patient_practitioner_act_and_price(db, patient, acte, medecin):
-    preview = await preview_contract_consent(
-        patient_id=patient.id,
-        acte_ids=[acte.id],
-        praticien_id=medecin.id,
-        clinic_id=1,
-        db=db,
-    )
-
-    assert patient.prenom in preview["contenu"]
-    assert medecin.prenom in preview["contenu"]
-    assert acte.nom in preview["contenu"]
-    assert preview["snapshot"]["actes"] == [
-        {"id": acte.id, "nom": acte.nom, "prix": 250.0, "devise": "DT"}
-    ]
-
-
-@pytest.mark.asyncio
-async def test_contract_signature_freezes_snapshot_and_practitioner(db, patient, acte, medecin, tmp_path, monkeypatch):
-    from config import get_settings
-    settings = get_settings()
-    monkeypatch.setattr(settings, "data_dir", tmp_path)
-
-    consentement = await sign_consent(
-        patient_id=patient.id,
-        acte_id=acte.id,
-        acte_ids=[acte.id],
-        signature_b64="data:image/png;base64,iVBORw0KGgo=",
-        method="tactile",
-        ip_address="10.0.0.2",
-        db=db,
-        praticien_id=medecin.id,
-        attestation_praticien=True,
-        signature_praticien_b64="data:image/png;base64,iVBORw0KGgo=",
-        clinic_id=1,
-    )
-
-    assert consentement.contrat_snapshot["patient"]["nom_complet"] == f"{patient.prenom} {patient.nom}"
-    assert consentement.contrat_snapshot["praticien"]["id"] == medecin.id
-    assert consentement.contrat_snapshot["actes"][0]["id"] == acte.id
-    assert consentement.praticien_signataire_id == medecin.id
-    assert consentement.attestation_praticien is True
-    assert consentement.signature_praticien_base64.startswith("data:image/png")

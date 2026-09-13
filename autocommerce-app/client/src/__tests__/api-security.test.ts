@@ -98,7 +98,10 @@ describe("API frontend — frontières et tokens", () => {
 
     expect(result.data).toEqual({ patients: [] });
     expect(privateCalls).toBe(2);
-    expect(axios.post).toHaveBeenCalledWith("/api/private/auth/refresh", undefined, { withCredentials: true });
+    expect(axios.post).toHaveBeenCalledWith("/api/private/auth/refresh", undefined, {
+      withCredentials: true,
+      timeout: 15000,
+    });
     expect(retriedConfig?.headers?.Authorization).toBe("Bearer refreshed-access");
     expect(getAccessToken()).toBe("refreshed-access");
   });

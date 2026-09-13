@@ -243,7 +243,6 @@ class TacheInterneAssistant(Base):
     assignee_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True
     )
-    assignee_role: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
     patient_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="SET NULL"), nullable=True
     )

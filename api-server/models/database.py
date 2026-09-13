@@ -6,6 +6,7 @@ Clinic_id=1 partout (préparation multi-clinique).
 """
 
 import enum
+import os
 from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
@@ -53,6 +54,17 @@ class RoleEnum(str, enum.Enum):
     COMMERCIAL = "commercial"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
+    # Rôle générique pour tout professionnel non couvert par un rôle dédié
+    # (masseuse, drainage lymphatique, épilation, etc.) — préféré à la
+    # création d'un rôle rigide par métier (Bloc 1, ajustement 7). Le
+    # métier réel se lit sur `Utilisateur.specialite` (déjà existant,
+    # texte libre) ; les actes autorisés restent portés par la table
+    # d'association existante `utilisateurs_actes` (`Utilisateur.
+    # actes_pratiques`) — aucune nouvelle table n'était nécessaire, ces
+    # deux mécanismes existaient déjà. L'affichage (libellé "Masseuse",
+    # "Prestataire"...) se fait au niveau frontend à partir de
+    # `specialite`, jamais en dur sur le rôle backend.
+    PRESTATAIRE = "prestataire"
 
 
 class StatutRDV(str, enum.Enum):
@@ -62,6 +74,10 @@ class StatutRDV(str, enum.Enum):
     TERMINE = "termine"
     ANNULE = "annule"
     NO_SHOW = "no_show"
+    # Bloc 3 — parcours d'arrivée : le patient est arrivé, puis son accord
+    # pour être reçu / examiné est confirmé (l'absence reste `no_show`).
+    ARRIVE = "arrive"
+    ACCORD = "accord"
 
 
 class TypePhoto(str, enum.Enum):
@@ -78,6 +94,13 @@ class StatutLot(str, enum.Enum):
     EPUISE = "epuise"
     EXPIRE = "expire"
     RETIRE = "retire"
+
+
+class TypeMouvementLot(str, enum.Enum):
+    RECEPTION = "reception"
+    INJECTION = "injection"
+    AJUSTEMENT = "ajustement"
+    SORTIE = "sortie"
 
 
 class StatutFacture(str, enum.Enum):
@@ -115,6 +138,11 @@ class StatutCandidature(str, enum.Enum):
     ENTRETIEN = "entretien"
     ACCEPTE = "accepte"
     REFUSE = "refuse"
+
+
+class StatutPoste(str, enum.Enum):
+    OUVERT = "ouvert"
+    FERME = "ferme"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -283,14 +311,106 @@ class Patient(Base):
     )
 
 
+class PatientMedicalFact(Base):
+    """Fait médical structuré vérifiable, sans interpréter les textes historiques."""
+
+    __tablename__ = "patients_faits_medicaux"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    patient_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("patients.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    auteur_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    type_fait: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    classification: Mapped[str] = mapped_column(String(40), nullable=False, default="MEDICAL_SENSITIVE")
+    donnees_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="MANUAL")
+    verification_status: Mapped[str] = mapped_column(String(30), nullable=False, default="VERIFIED")
+    actif: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_patient_facts_clinic_patient_type", "clinic_id", "patient_id", "type_fait"),
+    )
+
+
+class PrescriptionMedicale(Base):
+    """Prescription médicale créée exclusivement par un médecin authentifié."""
+
+    __tablename__ = "prescriptions_medicales"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    patient_id: Mapped[int] = mapped_column(Integer, ForeignKey("patients.id", ondelete="RESTRICT"), nullable=False, index=True)
+    episode_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("episodes_patient.id", ondelete="SET NULL"), nullable=True, index=True)
+    consultation_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("consultations_medicales.id", ondelete="SET NULL"), nullable=True, index=True)
+    intervention_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("interventions.id", ondelete="SET NULL"), nullable=True, index=True)
+    acte_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("actes_medicaux.id", ondelete="SET NULL"), nullable=True, index=True)
+    prescripteur_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False, index=True)
+    date_prescription: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    details_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE", index=True)
+    classification: Mapped[str] = mapped_column(String(40), nullable=False, default="MEDICAL_SENSITIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (Index("ix_prescriptions_clinic_patient_date", "clinic_id", "patient_id", "date_prescription"),)
+
+
+class DocumentMedicalPatient(Base):
+    """Document patient externe, privé, chiffré et auditable."""
+
+    __tablename__ = "documents_medicaux_patients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    patient_id: Mapped[int] = mapped_column(Integer, ForeignKey("patients.id", ondelete="RESTRICT"), nullable=False, index=True)
+    consultation_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("consultations_medicales.id", ondelete="SET NULL"), nullable=True, index=True)
+    intervention_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("interventions.id", ondelete="SET NULL"), nullable=True, index=True)
+    importateur_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False, index=True)
+    nom_original: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    classification: Mapped[str] = mapped_column(String(40), nullable=False, default="EXTERNAL_MEDICAL_DOCUMENT")
+    description_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    chemin_chiffre: Mapped[str] = mapped_column(String(700), nullable=False)
+    hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    taille_octets: Mapped[int] = mapped_column(Integer, nullable=False)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deleted_by: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (Index("ix_documents_medicaux_clinic_patient", "clinic_id", "patient_id", "statut"),)
+
+
+def _default_acte_nom_normalise(context):
+    """Dérive la clé catalogue à l’insertion si l’appelant ne la fournit pas."""
+    params = context.get_current_parameters()
+    return str(params.get("nom") or "").strip().lower()
+
+
 class ActeMedical(Base):
     __tablename__ = "actes_medicaux"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     nom: Mapped[str] = mapped_column(String(200), nullable=False)
-    nom_normalise: Mapped[str] = mapped_column(String(200), nullable=False)
+    nom_normalise: Mapped[str] = mapped_column(
+        String(200), nullable=False, default=_default_acte_nom_normalise
+    )
     categorie: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Ajouté pour le cœur épisode (models/episode_core.py, Bloc 1) : distingue
+    # la profession concernée par l'acte, indépendamment de `categorie` (libre).
+    # Nullable en transition — les actes existants sont classés par script de
+    # migration (Bloc 13), pas par défaut silencieux.
+    type_intervention: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     duree_minutes: Mapped[int] = mapped_column(Integer, default=30)
     prix_base: Mapped[Decimal] = mapped_column(Numeric(10, 3), default=Decimal("0.000"))
     is_gratuit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -320,6 +440,11 @@ class ActeMedical(Base):
     praticiens: Mapped[List["Utilisateur"]] = relationship(
         "Utilisateur", secondary="utilisateurs_actes", back_populates="actes_pratiques"
     )
+
+
+# Compatibilité de nom avec l’architecture cible du Bloc 1 : le catalogue
+# historique `ActeMedical` est l’unique catalogue partagé des actes cliniques.
+ActeCatalogue = ActeMedical
 
 
 class Salle(Base):
@@ -435,6 +560,15 @@ class RendezVous(Base):
         Integer, ForeignKey("salles.id", ondelete="SET NULL"), nullable=True
     )
     statut: Mapped[StatutRDV] = mapped_column(String(20), default=StatutRDV.PLANIFIE.value)
+    # Bloc 3 — source de réservation (internet/whatsapp/telephone/manuel),
+    # référence stable pour recherche (ex. RDV1-000123), et lien de
+    # remplacement : un RDV de remplacement pointe vers le RDV initial
+    # sans jamais l'écraser.
+    source: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="manuel", index=True)
+    reference: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
+    remplace_rdv_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("rendez_vous.id", ondelete="SET NULL"), nullable=True
+    )
     notes_pre_acte: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes_post_acte: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rappel_j1_envoye: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -451,6 +585,7 @@ class RendezVous(Base):
         Index("ix_rdv_praticien_date", "praticien_id", "date_heure_debut"),
         Index("ix_rdv_patient_date", "patient_id", "date_heure_debut"),
         Index("ix_rdv_clinic_date", "clinic_id", "date_heure_debut"),
+        UniqueConstraint("remplace_rdv_id", name="uq_rendez_vous_remplace_rdv_id"),
     )
 
     # Relations
@@ -468,6 +603,49 @@ class RendezVous(Base):
     teleconsultation: Mapped[Optional["Teleconsultation"]] = relationship("Teleconsultation", back_populates="rdv")
 
 
+class AbsencePraticien(Base):
+    """Période d'indisponibilité d'un professionnel, distincte du no-show patient."""
+    __tablename__ = "absences_praticiens"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    praticien_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False, index=True)
+    debut: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    fin: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    motif: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ReaffectationRdv(Base):
+    """Proposition puis validation humaine d'une réaffectation liée à une absence."""
+    __tablename__ = "reaffectations_rdv"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    absence_id: Mapped[int] = mapped_column(Integer, ForeignKey("absences_praticiens.id", ondelete="CASCADE"), nullable=False, index=True)
+    rdv_id: Mapped[int] = mapped_column(Integer, ForeignKey("rendez_vous.id", ondelete="CASCADE"), nullable=False, unique=True)
+    ancien_praticien_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False)
+    praticien_propose_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="a_valider")
+    valide_par: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True)
+    valide_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class SuggestionRemplacementRdv(Base):
+    """Créneau proposé après annulation, toujours soumis à validation humaine."""
+    __tablename__ = "suggestions_remplacement_rdv"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    rdv_annule_id: Mapped[int] = mapped_column(Integer, ForeignKey("rendez_vous.id", ondelete="CASCADE"), nullable=False, index=True)
+    praticien_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False)
+    date_heure_debut: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    date_heure_fin: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="a_valider")
+    valide_par: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True)
+    nouveau_rdv_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("rendez_vous.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class DossierMedical(Base):
     __tablename__ = "dossiers_medicaux"
 
@@ -481,6 +659,9 @@ class DossierMedical(Base):
     )
     rdv_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("rendez_vous.id", ondelete="SET NULL"), nullable=True
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="SET NULL"), nullable=True, index=True
     )
     acte_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("actes_medicaux.id", ondelete="SET NULL"), nullable=True
@@ -516,6 +697,59 @@ class DossierMedical(Base):
     facture: Mapped[Optional["Facture"]] = relationship("Facture", back_populates="dossier", uselist=False)
 
 
+class ConsultationMedicale(Base):
+    """Consultation structurée, distincte du compte-rendu post-acte."""
+
+    __tablename__ = "consultations_medicales"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    patient_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("patients.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    rdv_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("rendez_vous.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    auteur_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    date_consultation: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    type_consultation: Mapped[str] = mapped_column(String(60), nullable=False, default="initiale")
+    motif_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    demande_patient_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    objectif_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    histoire_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    evolution_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    traitements_precedents_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contexte_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observations_cliniques_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    mesures_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diagnostic_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    indication_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    contre_indications_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    facteurs_risque_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    objectifs_therapeutiques_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    benefices_attendus_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    risques_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    alternatives_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    plan_therapeutique_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recommandation_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acte_propose_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suivi_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prochain_rdv_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    statut: Mapped[str] = mapped_column(String(20), nullable=False, default="brouillon", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_consultations_patient_date", "patient_id", "date_consultation"),
+        Index("ix_consultations_clinic_episode", "clinic_id", "episode_id"),
+    )
+
+
 class SeriePhotos(Base):
     __tablename__ = "series_photos"
 
@@ -548,6 +782,12 @@ class PhotoClinic(Base):
     clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    intervention_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="SET NULL"), nullable=True, index=True
     )
     dossier_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("dossiers_medicaux.id", ondelete="SET NULL"), nullable=True
@@ -583,6 +823,8 @@ class PhotoClinic(Base):
 
     # Relations
     patient: Mapped["Patient"] = relationship("Patient", back_populates="photos")
+    episode: Mapped[Optional["EpisodePatient"]] = relationship("EpisodePatient", back_populates="photos")
+    intervention: Mapped[Optional["Intervention"]] = relationship("Intervention", back_populates="photos")
     dossier: Mapped[Optional["DossierMedical"]] = relationship("DossierMedical", back_populates="photos")
     serie: Mapped[Optional["SeriePhotos"]] = relationship("SeriePhotos", back_populates="photos")
     prise_par: Mapped[Optional["Utilisateur"]] = relationship(
@@ -597,6 +839,12 @@ class Consentement(Base):
     clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    intervention_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     acte_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("actes_medicaux.id", ondelete="SET NULL"), nullable=True
@@ -618,6 +866,8 @@ class Consentement(Base):
 
     # Relations
     patient: Mapped["Patient"] = relationship("Patient", back_populates="consentements")
+    episode: Mapped[Optional["EpisodePatient"]] = relationship("EpisodePatient", back_populates="consentements")
+    intervention: Mapped[Optional["Intervention"]] = relationship("Intervention", back_populates="consentements")
     acte: Mapped[Optional["ActeMedical"]] = relationship("ActeMedical", back_populates="consentements")
     praticien_signataire: Mapped[Optional["Utilisateur"]] = relationship(
         "Utilisateur", foreign_keys=[praticien_signataire_id]
@@ -684,6 +934,39 @@ class LotInjectable(Base):
     produit: Mapped["ProduitInjectable"] = relationship("ProduitInjectable", back_populates="lots")
     utilisations: Mapped[List["UtilisationLot"]] = relationship("UtilisationLot", back_populates="lot")
     depenses: Mapped[List["Depense"]] = relationship("Depense", back_populates="lot_injectable")
+    mouvements: Mapped[List["MouvementLotInjectable"]] = relationship(
+        "MouvementLotInjectable", back_populates="lot"
+    )
+
+
+class MouvementLotInjectable(Base):
+    """Registre d'audit unique des mouvements d'un lot injectable.
+
+    - ``reception``  : crédit de stock (livraison, réapprovisionnement)
+    - ``injection``  : débit lié à une injection patiente (traçabilité)
+    - ``ajustement`` : correction d'inventaire
+    - ``sortie``     : sortie de stock non patiente (transfert, casse, don)
+    """
+    __tablename__ = "mouvements_lots_injectables"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    lot_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lots_injectables.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    type_mouvement: Mapped[str] = mapped_column(String(20), nullable=False)
+    quantite: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    date_mouvement: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    utilisateur_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True
+    )
+    motif: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    reference: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    document_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Relations
+    lot: Mapped["LotInjectable"] = relationship("LotInjectable", back_populates="mouvements")
+    utilisateur: Mapped[Optional["Utilisateur"]] = relationship("Utilisateur")
 
 
 class UtilisationLot(Base):
@@ -699,6 +982,12 @@ class UtilisationLot(Base):
     )
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="RESTRICT"), index=True, nullable=False
+    )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    intervention_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     praticien_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("utilisateurs.id", ondelete="RESTRICT"), nullable=False
@@ -717,6 +1006,8 @@ class UtilisationLot(Base):
     lot: Mapped["LotInjectable"] = relationship("LotInjectable", back_populates="utilisations")
     dossier: Mapped[Optional["DossierMedical"]] = relationship("DossierMedical", back_populates="utilisations_lot")
     patient: Mapped["Patient"] = relationship("Patient", back_populates="utilisations_lot")
+    episode: Mapped[Optional["EpisodePatient"]] = relationship("EpisodePatient", back_populates="utilisations_lot")
+    intervention: Mapped[Optional["Intervention"]] = relationship("Intervention", back_populates="utilisations_lot")
     praticien: Mapped["Utilisateur"] = relationship(
         "Utilisateur", foreign_keys=[praticien_id], back_populates="utilisations_lot"
     )
@@ -736,7 +1027,13 @@ class Facture(Base):
     dossier_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("dossiers_medicaux.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    devis_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("devis.id", ondelete="RESTRICT"), nullable=True, unique=True, index=True
+    )
     numero_facture: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    # Devise figée à la création : un changement de setting ne réécrit pas l’historique.
+    currency_code: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
+    currency_symbol: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     date_emission: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
     date_echeance: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     actes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -769,6 +1066,14 @@ class Facture(Base):
         "Utilisateur", foreign_keys=[created_by], back_populates="factures_created"
     )
     commissions: Mapped[List["Commission"]] = relationship("Commission", back_populates="facture")
+    # Ajouté pour le nouveau cœur épisode (models/episode_core.py) — une
+    # facture existante (JSON `actes`/`produits`) peut coexister sans
+    # lignes structurées ; les nouvelles factures issues d'un épisode
+    # utilisent `lignes`. Voir Bloc 13 pour la compatibilité ascendante.
+    lignes: Mapped[List["FactureLigne"]] = relationship(
+        "FactureLigne", back_populates="facture", cascade="all, delete-orphan"
+    )
+    paiements: Mapped[List["Paiement"]] = relationship("Paiement", back_populates="facture")
 
 
 class Commission(Base):
@@ -901,12 +1206,41 @@ class Depense(Base):
     )
 
 
+class Poste(Base):
+    """Offre de poste — support optionnel du recrutement.
+
+    Le champ texte libre ``Candidature.poste`` reste la source de vérité
+    historique (compatibilité ascendante des tests et intégrations
+    existantes). ``Poste`` est une entité additive : une candidature peut
+    exister sans poste rattaché (saisie manuelle rapide), et un poste peut
+    exister sans aucune candidature (préparation d'une annonce).
+    """
+
+    __tablename__ = "postes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    titre: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    statut: Mapped[StatutPoste] = mapped_column(
+        String(20), default=StatutPoste.OUVERT.value, nullable=False
+    )
+    cree_par_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ferme_le: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class Candidature(Base):
     __tablename__ = "candidatures"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     poste: Mapped[str] = mapped_column(String(200), nullable=False)
+    poste_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("postes.id", ondelete="SET NULL"), nullable=True
+    )
     nom_candidat: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     telephone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -916,15 +1250,59 @@ class Candidature(Base):
         String(20), default=StatutCandidature.RECU.value
     )
     notes_rh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Texte extrait automatiquement du CV (upload direct ou formulaire public) —
+    # distinct de notes_rh, qui reste réservé aux commentaires manuels du staff RH.
+    cv_texte_extrait: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Identifiant Resend Receiving, utilisé pour absorber les retries Svix.
+    source_email_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, unique=True)
     date_entretien: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     evaluateur_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True
     )
+    # Analyse IA — toujours optionnelle. ``analyse_ia_statut`` vaut
+    # "non_demandee" | "indisponible" | "terminee" et permet au frontend de
+    # savoir s'il faut proposer un bouton "Relancer l'analyse" ou afficher
+    # un résultat. Aucun de ces champs n'est requis pour faire progresser
+    # une candidature manuellement.
+    analyse_ia_statut: Mapped[str] = mapped_column(
+        String(20), default="non_demandee", nullable=False
+    )
+    analyse_ia_resume: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    analyse_ia_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    analyse_ia_le: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relations
     evaluateur: Mapped[Optional["Utilisateur"]] = relationship(
         "Utilisateur", foreign_keys=[evaluateur_id], back_populates="candidatures_evaluees"
+    )
+    historique_statuts: Mapped[List["HistoriqueCandidature"]] = relationship(
+        "HistoriqueCandidature", back_populates="candidature", cascade="all, delete-orphan",
+        order_by="HistoriqueCandidature.changed_at.desc()",
+    )
+
+
+class HistoriqueCandidature(Base):
+    __tablename__ = "historique_candidatures"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    candidature_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("candidatures.id", ondelete="CASCADE"), nullable=False
+    )
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ancien_statut: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    nouveau_statut: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes_rh: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    date_entretien: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    change_par_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("utilisateurs.id", ondelete="SET NULL"), nullable=True
+    )
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    candidature: Mapped["Candidature"] = relationship("Candidature", back_populates="historique_statuts")
+
+    __table_args__ = (
+        Index("ix_historique_candidatures_candidature", "candidature_id", "changed_at"),
     )
 
 
@@ -971,6 +1349,31 @@ class MouvementConsommable(Base):
     # Relations
     consommable: Mapped["Consommable"] = relationship("Consommable", back_populates="mouvements")
     utilisateur: Mapped["Utilisateur"] = relationship("Utilisateur", back_populates="mouvements_consommables")
+
+
+class AlerteStock(Base):
+    """Rappel persistant lorsqu'un article passe sous son seuil de stock."""
+    __tablename__ = "alertes_stock"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    type_article: Mapped[str] = mapped_column(String(20), nullable=False)
+    produit_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    lot_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    consommable_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    niveau: Mapped[str] = mapped_column(String(20), nullable=False)
+    article_nom: Mapped[str] = mapped_column(String(200), nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    stock_actuel: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    seuil: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    statut: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
+    declenchee_le: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    acquittee_le: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    acquittee_par_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    __table_args__ = (
+        Index("ix_alertes_stock_active_article", "clinic_id", "type_article", "produit_id", "lot_id", "consommable_id", "statut"),
+    )
 
 
 class Teleconsultation(Base):
@@ -1169,11 +1572,17 @@ class EquipeMessage(Base):
     lu: Mapped[bool] = mapped_column(Boolean, default=False)
     lu_a: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     cree_a: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_equipe_messages_clinic_expediteur", "clinic_id", "expediteur_id"),
         Index("ix_equipe_messages_clinic_destinataire", "clinic_id", "destinataire_id"),
         Index("ix_equipe_messages_destinataire_lu", "destinataire_id", "lu"),
+        Index(
+            "uq_equipe_messages_send_idempotency",
+            "clinic_id", "expediteur_id", "idempotency_key", "destinataire_id",
+            unique=True,
+        ),
     )
 
     # Relations
@@ -1202,8 +1611,26 @@ def normalize_async_database_url(database_url: str) -> str:
 
 
 def get_async_engine(database_url: str):
-    """Retourne le moteur async SQLAlchemy avec nettoyage des guillemets et forçage asyncpg."""
-    return create_async_engine(normalize_async_database_url(database_url), echo=False, future=True)
+    """Retourne le moteur async SQLAlchemy avec nettoyage des guillemets et forçage asyncpg.
+
+    P0-1 — Durcissement du pool pour les bases PostgreSQL : bornes explicites,
+    pool_pre_ping et délais courts d'acquisition. Un pool épuisé ou une
+    connexion morte échouent en quelques secondes au lieu de laisser la requête
+    patienter (délais de réactivation ~45 s observés lors de l'audit). Les
+    moteurs non-PostgreSQL (sqlite de test, dev) conservent leurs défauts.
+    """
+    url = normalize_async_database_url(database_url)
+    pool_kwargs: dict = {}
+    if url.startswith("postgres"):
+        pool_kwargs = {
+            "pool_pre_ping": True,
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "10")),
+            "pool_timeout": float(os.getenv("DB_POOL_TIMEOUT", "5")),
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
+            "connect_args": {"timeout": 15, "command_timeout": 30},
+        }
+    return create_async_engine(url, echo=False, future=True, **pool_kwargs)
 
 
 def get_async_sessionmaker(engine):
@@ -1284,6 +1711,12 @@ class SimulationIA(Base):
     patient_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("patients.id", ondelete="CASCADE"), index=True, nullable=False
     )
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    intervention_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     zone_anatomique: Mapped[str] = mapped_column(String(50), nullable=False)
     url_resultat: Mapped[str] = mapped_column(String(500), nullable=False)
     url_masque: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -1299,6 +1732,8 @@ class SimulationIA(Base):
     # Relations
     photo_source: Mapped["PhotoClinic"] = relationship("PhotoClinic")
     patient: Mapped["Patient"] = relationship("Patient")
+    episode: Mapped[Optional["EpisodePatient"]] = relationship("EpisodePatient", back_populates="simulations_ia")
+    intervention: Mapped[Optional["Intervention"]] = relationship("Intervention", back_populates="simulations_ia")
     consentement: Mapped["Consentement"] = relationship("Consentement")
     createur: Mapped["Utilisateur"] = relationship("Utilisateur")
 
@@ -1344,6 +1779,24 @@ class AuditLogFinancial(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     modifie_par: Mapped["Utilisateur"] = relationship("Utilisateur")
+
+
+class AuditLogTeam(Base):
+    """Journal immuable des actions sensibles de gestion d'équipe."""
+
+    __tablename__ = "audit_logs_team"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    clinic_id: Mapped[int] = mapped_column(Integer, default=1, nullable=False, index=True)
+    utilisateur_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(50), nullable=False)
+    valeur_avant: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    valeur_apres: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    modifie_par_id: Mapped[int] = mapped_column(Integer, ForeignKey("utilisateurs.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    modifie_par: Mapped["Utilisateur"] = relationship("Utilisateur")
+
 
 # ── Module Délégués Médicaux & Laboratoires (Niveau 9+ Extension) ────────
 
@@ -1451,7 +1904,14 @@ class SuiviPostActe(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     clinic_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     patient_id: Mapped[int] = mapped_column(Integer, ForeignKey("patients.id", ondelete="RESTRICT"), nullable=False, index=True)
+    episode_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("episodes_patient.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    intervention_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("interventions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     dossier_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("dossiers_medicaux.id", ondelete="SET NULL"), nullable=True)
+    rdv_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("rendez_vous.id", ondelete="SET NULL"), nullable=True, index=True)
     seance_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("seances_cures.id", ondelete="SET NULL"), nullable=True)
     type_suivi: Mapped[str] = mapped_column(String(60), nullable=False, default="controle_post_acte")
     echeance_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
@@ -1463,7 +1923,13 @@ class SuiviPostActe(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    __table_args__ = (Index("ix_suivis_clinic_due_status", "clinic_id", "echeance_at", "statut"),)
+    __table_args__ = (
+        Index("ix_suivis_clinic_due_status", "clinic_id", "echeance_at", "statut"),
+        Index("ix_suivis_episode_intervention", "episode_id", "intervention_id"),
+    )
+
+    episode: Mapped[Optional["EpisodePatient"]] = relationship("EpisodePatient", back_populates="suivis_post_acte")
+    intervention: Mapped[Optional["Intervention"]] = relationship("Intervention", back_populates="suivis_post_acte")
 
 
 class EvenementIndesirable(Base):

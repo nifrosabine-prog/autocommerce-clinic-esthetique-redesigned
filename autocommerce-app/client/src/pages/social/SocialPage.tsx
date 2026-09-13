@@ -73,7 +73,7 @@ const AVIS_STATUT: Record<string, { label: string; color: string }> = {
 // tant qu'aucune vraie clé API n'est fournie côté backend, conformément
 // au cahier des charges ("affiche cet état clairement, ne le traite pas
 // comme une erreur générique").
-const PLATFORM_STATUS: Record<string, 'connecte' | 'non_connecte'> = {
+const DEFAULT_PLATFORM_STATUS: Record<string, 'connecte' | 'non_connecte'> = {
   whatsapp: 'connecte',
   instagram: 'non_connecte',
   facebook: 'non_connecte',
@@ -89,29 +89,51 @@ export default function SocialPage() {
   const [replyTarget, setReplyTarget] = useState<SocialMessage | null>(null);
   const [avisTarget, setAvisTarget] = useState<SocialAvis | null>(null);
   const [newPostOpen, setNewPostOpen] = useState(false);
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
+  const [platformStatus, setPlatformStatus] = useState(DEFAULT_PLATFORM_STATUS);
 
   useEffect(() => {
     loadSocialData();
   }, []);
 
   const loadSocialData = async () => {
-    try {
-      setIsLoading(true);
-      const [messagesRes, postsRes, avisRes] = await Promise.all([
-        api.get('/social/messages'),
-        api.get('/social/posts'),
-        api.get('/social/avis'),
-      ]);
-      // Les endpoints renvoient un tableau brut
-      setMessages(Array.isArray(messagesRes.data) ? messagesRes.data : []);
-      setPosts(Array.isArray(postsRes.data) ? postsRes.data : []);
-      setAvis(Array.isArray(avisRes.data) ? avisRes.data : []);
-    } catch (err: any) {
-      console.error('Failed to load social data:', err);
-      toast.error('Erreur lors du chargement des données sociales');
-    } finally {
-      setIsLoading(false);
+    setIsLoading(true);
+    setSectionErrors({});
+    const results = await Promise.allSettled([
+      api.get('/social/messages'),
+      api.get('/social/posts'),
+      api.get('/social/avis'),
+      api.get('/social/integrations/status'),
+    ]);
+    const errors: Record<string, string> = {};
+    const sectionNames = ['messages', 'posts', 'avis'];
+    results.forEach((result, index) => {
+      const section = sectionNames[index];
+      if (result.status === 'fulfilled') {
+        const data = Array.isArray(result.value.data) ? result.value.data : [];
+        if (section === 'messages') setMessages(data);
+        if (section === 'posts') setPosts(data);
+        if (section === 'avis') setAvis(data);
+      } else {
+        console.error(`Failed to load social ${section}:`, result.reason);
+        errors[section] = 'Cette section est momentanément indisponible.';
+      }
+    });
+    const integrationResult = results[3];
+    if (integrationResult.status === 'fulfilled') {
+      const whatsapp = integrationResult.value.data?.whatsapp;
+      setPlatformStatus((current) => ({
+        ...current,
+        whatsapp: whatsapp?.ready ? 'connecte' : 'non_connecte',
+      }));
+    } else {
+      setPlatformStatus((current) => ({ ...current, whatsapp: 'non_connecte' }));
     }
+    setSectionErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error('Certaines données sociales sont momentanément indisponibles');
+    }
+    setIsLoading(false);
   };
 
   const handlePublierPost = async (post: SocialPost) => {
@@ -152,7 +174,7 @@ export default function SocialPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-4">
-              {Object.entries(PLATFORM_STATUS).map(([platform, status]) => (
+              {Object.entries(platformStatus).map(([platform, status]) => (
                 <div key={platform} className="p-3 border rounded-lg">
                   <p className="text-sm font-medium capitalize">{platform}</p>
                   <div className="flex items-center gap-2 mt-2">
@@ -177,6 +199,7 @@ export default function SocialPage() {
           <TabsContent value="messages" className="space-y-4">
             <Card>
               <CardContent className="pt-6">
+                {sectionErrors.messages && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.messages}</p>}
                 {messages.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">Aucun message</p>
                 ) : (
@@ -227,6 +250,7 @@ export default function SocialPage() {
           <TabsContent value="posts" className="space-y-4">
             <Card>
               <CardContent className="pt-6">
+                {sectionErrors.posts && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.posts}</p>}
                 {posts.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">Aucun post</p>
                 ) : (
@@ -276,6 +300,7 @@ export default function SocialPage() {
           <TabsContent value="avis" className="space-y-4">
             <Card>
               <CardContent className="pt-6">
+                {sectionErrors.avis && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.avis}</p>}
                 {avis.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">Aucun avis client</p>
                 ) : (

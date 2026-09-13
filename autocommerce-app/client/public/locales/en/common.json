@@ -43,7 +43,13 @@
     "recruitment": "Recruitment",
     "social": "Social CRM",
     "team": "Team Messaging",
-    "settings": "Settings"
+    "settings": "Settings",
+    "clinical_ops": "Care Tracking",
+    "delegates": "Delegates & Labs",
+    "team_management": "Team Management",
+    "rooms": "Room Management",
+    "hr_reporting": "HR Reporting",
+    "medical_acts": "Medical acts"
   },
   "auth": {
     "email": "Email",
@@ -118,7 +124,25 @@
     "stock_alerts": "Stock Alerts",
     "unpaid_invoices": "Unpaid Invoices",
     "social_messages": "Social Messages",
-    "quick_actions": "Quick Actions"
+    "quick_actions": "Quick Actions",
+    "clinical_pilot": "Clinical operations",
+    "greeting": "Hello {{name}}",
+    "you": "there",
+    "subtitle": "A clear view of your clinic’s essential activity, without noise or decorative metrics.",
+    "today": "Today",
+    "today_appointments_helper": "today’s schedule",
+    "stock_alerts_helper": "products to monitor",
+    "unpaid_invoices_helper": "awaiting payment",
+    "social_messages_helper": "new social requests",
+    "operational_status": "Operational status",
+    "operational_description": "These indicators come from the Schedule, Inventory, Billing and Social CRM modules. Use the cards above to go straight to the relevant action.",
+    "daily_priority": "Today’s priority",
+    "check_stock": "Check inventory",
+    "follow_payments": "Follow up on payments",
+    "all_under_control": "Everything is under control",
+    "quick_access": "Quick access",
+    "from_metric_to_action": "From insight to action",
+    "shortcuts_description": "Shortcuts keep the existing routes."
   },
   "simulation": {
     "title": "AI Morphing Simulation",
@@ -136,5 +160,28 @@
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete"
+  },
+  "roles": {
+    "directrice": "Director",
+    "admin": "Administrator",
+    "assistante": "Assistant",
+    "medecin": "Doctor",
+    "estheticienne": "Aesthetician",
+    "praticien": "Practitioner",
+    "commercial": "Sales Representative",
+    "unknown": "User"
+  },
+  "landing": {
+    "eyebrow": "Aesthetic medicine",
+    "navLabel": "Main navigation",
+    "nav": {
+      "about": "About us",
+      "services": "Treatments",
+      "contact": "Contact"
+    },
+    "call": "Call us",
+    "book": "Book an appointment",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   }
 }

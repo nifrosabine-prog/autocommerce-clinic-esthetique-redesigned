@@ -57,7 +57,9 @@ describe("ProtectedRoute — sécurité de navigation", () => {
     expect(screen.getByText("administration")).toBeInTheDocument();
   });
 
-  it.each(["medecin", "estheticienne", "assistante", "commercial"])("refuse le rôle %s sur une route d’administration", (role) => {
+  it.each(["medecin", "estheticienne", "assistante", "commercial"])("redirige le rôle %s vers son dashboard sur une route d’administration", (role) => {
+    const setLocation = vi.fn();
+    mockedUseLocation.mockReturnValue(["/settings", setLocation]);
     mockedUseAuth.mockReturnValue(authState({
       user: { id: 1, email: `${role}@clinic.test`, nom: role, prenom: "User", role },
       isAuthenticated: true,
@@ -65,7 +67,7 @@ describe("ProtectedRoute — sécurité de navigation", () => {
 
     render(<ProtectedRoute requiredRoles={["directrice", "admin"]}><div>administration</div></ProtectedRoute>);
 
-    expect(screen.getByRole("heading", { name: "Accès refusé" })).toBeInTheDocument();
+    expect(setLocation).toHaveBeenCalledWith("/dashboard");
     expect(screen.queryByText("administration")).not.toBeInTheDocument();
   });
 

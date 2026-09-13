@@ -48,6 +48,7 @@ from models.database import Base  # noqa: E402
 from models import omnicanal as _omnicanal_models  # noqa: E402,F401
 from models import security as _security_models  # noqa: E402,F401
 from models import workflow_engine as _workflow_models  # noqa: E402,F401
+from models import episode_core as _episode_core_models  # noqa: E402,F401
 
 config = context.config
 

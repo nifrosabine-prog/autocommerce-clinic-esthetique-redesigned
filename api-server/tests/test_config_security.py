@@ -4,6 +4,7 @@ Vérifie le garde-fou qui empêche de démarrer en production avec des
 secrets par défaut ou absents.
 """
 import pytest
+from cryptography.fernet import Fernet
 
 from config import Settings, _validate_production_secrets, DEFAULT_SECRET_KEY
 
@@ -11,12 +12,14 @@ from config import Settings, _validate_production_secrets, DEFAULT_SECRET_KEY
 def _settings(**overrides):
     base = dict(
         env="production",
-        clinic_id=None,
+        clinic_id=1,
         public_clinic_id=1,
         secret_key="S" * 64,
-        fernet_key="ZmVybmV0LWtleS1kZS10ZXN0LTMyLWJ5dGVzLW9r",
-        photo_encryption_key="cGhvdG8ta2V5LWRlLXRlc3QtMzItYnl0ZXMtb2s=",
-        mfa_encryption_key="bWZhLWtleS1kZS10ZXN0LTMyeWJ5dGVzLW9r",
+        # Correctif AUD-001 : clés Fernet réelles (44 caractères base64
+        # url-safe) — la validation refuse désormais tout autre format.
+        fernet_key=Fernet.generate_key().decode(),
+        photo_encryption_key=Fernet.generate_key().decode(),
+        mfa_encryption_key=Fernet.generate_key().decode(),
         database_url="postgresql+asyncpg://real_user:real_pass@db.clinic.tn:5432/clinic",
         redis_url="redis://:real_redis_key@redis.clinic.tn:6379/0",
         social_webhook_clinic_id=1,
@@ -52,9 +55,10 @@ def test_missing_photo_encryption_key_rejected_in_production():
 
 
 def test_photo_encryption_key_same_as_fernet_key_rejected():
+    same_key = Fernet.generate_key().decode()
     with pytest.raises(RuntimeError, match="PHOTO_ENCRYPTION_KEY"):
         _validate_production_secrets(_settings(
-            photo_encryption_key="ZmVybmV0LWtleS1kZS10ZXN0LTMyLWJ5dGVzLW9r"
+            fernet_key=same_key, photo_encryption_key=same_key,
         ))
 
 
@@ -94,3 +98,46 @@ def test_placeholder_critical_key_rejected_in_production():
 def test_whatsapp_dev_mode_rejected_in_production():
     with pytest.raises(RuntimeError, match="WA_ALLOW_DEV_MODE"):
         _validate_production_secrets(_settings(wa_allow_dev_mode=True))
+
+
+# ── Correctif AUD-001 : format des clés Fernet ──────────────────────
+
+def test_malformed_fernet_key_rejected_in_production():
+    """Une clé présente mais mal formée doit être refusée au démarrage,
+    pas découverte au premier POST de dossier médical (AUD-001)."""
+    with pytest.raises(RuntimeError, match="FERNET_KEY"):
+        _validate_production_secrets(_settings(fernet_key="pas-une-cle-fernet-valide"))
+
+
+def test_placeholder_fernet_key_rejected_in_production():
+    """Scénario exact de l'audit du 2026-09-11 : le placeholder de
+    production.env.example n'a pas été remplacé (43 caractères, non
+    décodable en 32 octets) → refus au démarrage."""
+    with pytest.raises(RuntimeError, match="FERNET_KEY"):
+        _validate_production_secrets(
+            _settings(fernet_key="REMPLACER_PAR_UNE_CLE_FERNET_BASE64_URLSAFE")
+        )
+
+
+def test_valid_generated_fernet_key_passes():
+    _validate_production_secrets(
+        _settings(
+            fernet_key=Fernet.generate_key().decode(),
+            photo_encryption_key=Fernet.generate_key().decode(),
+            mfa_encryption_key=Fernet.generate_key().decode(),
+        )
+    )  # ne doit pas lever
+
+
+def test_malformed_mfa_encryption_key_rejected_in_production():
+    with pytest.raises(RuntimeError, match="MFA_ENCRYPTION_KEY"):
+        _validate_production_secrets(_settings(mfa_encryption_key="toto"))
+
+
+def test_identical_valid_fernet_keys_still_rejected():
+    """La règle d'unicité des clés s'applique aussi à des clés valides."""
+    same_key = Fernet.generate_key().decode()
+    with pytest.raises(RuntimeError, match="PHOTO_ENCRYPTION_KEY"):
+        _validate_production_secrets(
+            _settings(fernet_key=same_key, photo_encryption_key=same_key)
+        )

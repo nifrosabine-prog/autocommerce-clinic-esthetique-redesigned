@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ParrainageSection } from './ParrainageSection';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LoyaltyTransaction {
   id: number;
@@ -30,6 +31,9 @@ export default function LoyaltyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<LoyaltyTransaction[]>([]);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const canViewReferrals = ['directrice', 'assistante', 'admin'].includes(user?.role || '');
 
   useEffect(() => {
     loadLoyaltyData();
@@ -38,12 +42,16 @@ export default function LoyaltyPage() {
   const loadLoyaltyData = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const response = await api.get('/fidelite');
-      setTransactions(response.data.transactions || []);
-      setTotalPoints(response.data.total_points || 0);
+      setTransactions(Array.isArray(response.data?.transactions) ? response.data.transactions : []);
+      setTotalPoints(Number(response.data?.total_points) || 0);
     } catch (err: any) {
       console.error('Failed to load loyalty data:', err);
-      toast.error('Erreur lors du chargement des données de fidélité');
+      setTransactions([]);
+      setTotalPoints(0);
+      setError('Les données de fidélité sont momentanément indisponibles. Réessayez dans quelques instants.');
+      toast.error('Impossible de charger les données de fidélité');
     } finally {
       setIsLoading(false);
     }
@@ -67,10 +75,11 @@ export default function LoyaltyPage() {
           <p className="text-muted-foreground mt-1">Gestion du programme de récompenses</p>
         </div>
 
+        {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
         <Tabs defaultValue="historique" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className={`grid w-full ${canViewReferrals ? 'grid-cols-2' : 'grid-cols-1'} mb-8`}>
             <TabsTrigger value="historique">Historique & Points</TabsTrigger>
-            <TabsTrigger value="parrainage">Parrainage</TabsTrigger>
+            {canViewReferrals && <TabsTrigger value="parrainage">Parrainage</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="historique" className="space-y-6">
@@ -139,9 +148,11 @@ export default function LoyaltyPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="parrainage">
-            <ParrainageSection patientId={1} />
-          </TabsContent>
+          {canViewReferrals && (
+            <TabsContent value="parrainage">
+              <ParrainageSection patientId={1} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </DashboardLayout>

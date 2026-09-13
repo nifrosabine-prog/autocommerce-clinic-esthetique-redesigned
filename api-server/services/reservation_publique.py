@@ -66,7 +66,6 @@ async def _select_dynamic_practitioner(
             ActeMedical.id == acte_id,
             ActeMedical.clinic_id == clinic_id,
             ActeMedical.is_active,
-            ActeMedical.is_public,
         )
     )
     acte = acte_result.scalar_one_or_none()
@@ -75,7 +74,6 @@ async def _select_dynamic_practitioner(
 
     query = select(Utilisateur).where(
         Utilisateur.is_active,
-        Utilisateur.is_public,
         Utilisateur.clinic_id == clinic_id,
         Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]),
     )
@@ -130,16 +128,6 @@ async def reserver_creneau_public(
             clinic_id=clinic_id,
         )
         praticien_id = praticien.id
-    else:
-        practitioner = await db.scalar(select(Utilisateur).where(
-            Utilisateur.id == praticien_id,
-            Utilisateur.clinic_id == clinic_id,
-            Utilisateur.is_active,
-            Utilisateur.is_public,
-            Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]),
-        ))
-        if not practitioner:
-            raise ValueError("Praticien non disponible à la réservation publique")
 
     rdv, consentement_manquant = await creer_rdv(
         patient_id=patient.id,

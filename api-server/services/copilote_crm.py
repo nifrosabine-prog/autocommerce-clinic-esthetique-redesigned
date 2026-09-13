@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.database import (
-    Patient, DossierMedical, StatutRDV, SeriePhotos,
+    Patient, DossierMedical, RendezVous, StatutRDV, SeriePhotos,
 )
 
 from core.llm_client import LLMClient, LLMUnavailable, get_llm_client, pseudonymize_pii
@@ -62,7 +62,8 @@ class CopiloteCRMService:
             Patient.clinic_id == clinic_id,
         ).options(
             selectinload(Patient.dossiers).selectinload(DossierMedical.acte),
-            selectinload(Patient.rdvs),
+            selectinload(Patient.rdvs).selectinload(RendezVous.acte),
+            selectinload(Patient.rdvs).selectinload(RendezVous.praticien),
             selectinload(Patient.factures),
             selectinload(Patient.series_photos).selectinload(SeriePhotos.photos),
             selectinload(Patient.fidelite_transactions),

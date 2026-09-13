@@ -7,7 +7,7 @@ from hashlib import sha256
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.database import ActeMedical, BookingRequest, RoleEnum, Utilisateur
+from models.database import ActeMedical, BookingRequest, Utilisateur
 from services.agenda import creer_rdv
 from services.reservation_publique import _find_or_create_patient, _select_dynamic_practitioner, _valider_telephone
 
@@ -34,7 +34,6 @@ async def submit_booking_request(
             ActeMedical.id == acte_id,
             ActeMedical.clinic_id == clinic_id,
             ActeMedical.is_active,
-            ActeMedical.is_public,
         )
     )
     if not acte:
@@ -48,8 +47,6 @@ async def submit_booking_request(
                 Utilisateur.id == praticien_id,
                 Utilisateur.clinic_id == clinic_id,
                 Utilisateur.is_active,
-                Utilisateur.is_public,
-                Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]),
             )
         )
         if not practitioner:

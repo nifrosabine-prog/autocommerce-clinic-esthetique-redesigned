@@ -347,5 +347,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Downgrade is not strictly required for this verification but good practice
-    pass
+    # Supprimer d’abord les tables ajoutées par cette migration afin de
+    # respecter leurs clés étrangères vers le schéma initial.
+    op.drop_index('ix_taches_assistant_patient', table_name='taches_internes_assistant')
+    op.drop_index('ix_taches_assistant_clinic_statut', table_name='taches_internes_assistant')
+    op.drop_index('ix_taches_assistant_assignee', table_name='taches_internes_assistant')
+    op.drop_table('taches_internes_assistant')
+    op.drop_index('ix_audit_workflow_exec', table_name='workflow_audit_logs')
+    op.drop_index('ix_audit_clinic_date', table_name='workflow_audit_logs')
+    op.drop_table('workflow_audit_logs')

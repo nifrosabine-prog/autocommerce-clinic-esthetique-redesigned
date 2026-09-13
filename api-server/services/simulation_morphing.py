@@ -21,6 +21,7 @@ from core.medical_ai_policy import require_medical_ai_approval
 from models.database import Patient, PhotoClinic, SimulationIA
 from services.audit_medical import log_access
 from services.consentement import verify_consent
+from services.clinical_scope import validate_episode_intervention_scope
 from services.photos_clinic import (
     _add_watermark,
     _create_thumbnail,
@@ -197,6 +198,8 @@ async def generer_simulation_ia(
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
     clinic_id: int | None = None,
+    episode_id: int | None = None,
+    intervention_id: int | None = None,
 ) -> SimulationIA:
     """Génère une simulation de résultat par IA.
 
@@ -224,10 +227,18 @@ async def generer_simulation_ia(
     ))
     if patient_result.scalar_one_or_none() is None:
         raise ValueError("Patient non trouvé")
+    await validate_episode_intervention_scope(
+        db,
+        patient_id=patient_id,
+        clinic_id=clinic_id,
+        episode_id=episode_id,
+        intervention_id=intervention_id,
+    )
 
     # 1. Vérification consentement spécifique
     consentement = await verify_consent(
-        patient_id, None, db, type_consentement="simulation_ia", clinic_id=clinic_id
+        patient_id, None, db, type_consentement="simulation_ia", clinic_id=clinic_id,
+        episode_id=episode_id, intervention_id=intervention_id,
     )
     if not consentement:
         raise ValueError("Consentement spécifique 'Simulation IA' non signé ou expiré")
@@ -237,6 +248,8 @@ async def generer_simulation_ia(
         PhotoClinic.id == photo_source_id,
         PhotoClinic.patient_id == patient_id,
         PhotoClinic.clinic_id == clinic_id,
+        PhotoClinic.episode_id == episode_id if episode_id is not None else True,
+        PhotoClinic.intervention_id == intervention_id if intervention_id is not None else True,
         ~PhotoClinic.is_deleted,
     ))
     photo_source = result.scalar_one_or_none()
@@ -316,6 +329,8 @@ async def generer_simulation_ia(
         instructions=instructions,
         consentement_id=consentement.id,
         genere_par_id=genere_par_id,
+        episode_id=episode_id,
+        intervention_id=intervention_id,
     )
     db.add(simulation)
     await db.flush()

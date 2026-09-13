@@ -3,17 +3,13 @@ AutoCommerce Clinic — API Pointage & RH
 Gestion du temps de présence des praticiens.
 """
 
-import io
 from datetime import datetime, date, timedelta
 from typing import List, Optional
+from io import StringIO
+import csv
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
@@ -48,107 +44,6 @@ class UserReport(BaseModel):
     total_minutes: int
     details: List[PointageReportItem]
 
-
-def _format_duration(minutes: int) -> str:
-    hours, remaining_minutes = divmod(minutes, 60)
-    return f"{hours} h {remaining_minutes:02d} min"
-
-
-def _render_attendance_pdf(report: UserReport, date_debut: date, date_fin: date) -> bytes:
-    """Produit un export PDF administratif à partir du rapport déjà filtré par clinique."""
-    buffer = io.BytesIO()
-    document = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=1.5 * cm,
-        leftMargin=1.5 * cm,
-        topMargin=1.5 * cm,
-        bottomMargin=1.5 * cm,
-    )
-    styles = getSampleStyleSheet()
-    story = [
-        Paragraph("Clinic Esthétique — Rapport de présence", styles["Title"]),
-        Spacer(1, 0.35 * cm),
-        Paragraph(f"Employé : <b>{report.nom_complet}</b>", styles["Normal"]),
-        Paragraph(
-            f"Période : du {date_debut.strftime('%d/%m/%Y')} au {date_fin.strftime('%d/%m/%Y')}",
-            styles["Normal"],
-        ),
-        Paragraph(f"Total : <b>{_format_duration(report.total_minutes)}</b>", styles["Normal"]),
-        Spacer(1, 0.45 * cm),
-    ]
-    rows = [["Date", "Arrivée", "Départ", "Durée"]]
-    for item in report.details:
-        rows.append([
-            item.date.strftime("%d/%m/%Y"),
-            item.debut.strftime("%H:%M"),
-            item.fin.strftime("%H:%M") if item.fin else "—",
-            _format_duration(item.duree_minutes),
-        ])
-    if not report.details:
-        rows.append(["Aucun pointage sur cette période.", "", "", ""])
-
-    table = Table(rows, colWidths=[4.2 * cm, 3.4 * cm, 3.4 * cm, 4.2 * cm], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0F766E")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F8FAFC")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-    ]))
-    story.append(table)
-    document.build(story)
-    return buffer.getvalue()
-
-
-async def _build_admin_report(
-    utilisateur_id: int,
-    date_debut: date,
-    date_fin: date,
-    clinic_id: int,
-    db: AsyncSession,
-) -> UserReport:
-    if date_fin < date_debut:
-        raise HTTPException(400, "La date de fin doit être postérieure ou égale à la date de début")
-
-    target_user = await db.scalar(select(Utilisateur).where(
-        Utilisateur.id == utilisateur_id,
-        Utilisateur.clinic_id == clinic_id,
-    ))
-    if not target_user:
-        raise HTTPException(404, "Utilisateur non trouvé dans votre clinique.")
-
-    pointages = (await db.execute(
-        select(Pointage)
-        .where(
-            Pointage.utilisateur_id == utilisateur_id,
-            Pointage.clinic_id == clinic_id,
-            Pointage.debut >= datetime.combine(date_debut, datetime.min.time()),
-            Pointage.debut <= datetime.combine(date_fin, datetime.max.time()),
-            Pointage.fin.is_not(None),
-        )
-        .order_by(Pointage.debut.asc())
-    )).scalars().all()
-    details = [
-        PointageReportItem(
-            date=pointage.debut.date(),
-            debut=pointage.debut,
-            fin=pointage.fin,
-            duree_minutes=pointage.duree_minutes or 0,
-        )
-        for pointage in pointages
-    ]
-    return UserReport(
-        utilisateur_id=utilisateur_id,
-        nom_complet=f"{target_user.prenom} {target_user.nom}",
-        total_minutes=sum(pointage.duree_minutes or 0 for pointage in pointages),
-        details=details,
-    )
-
 @router.get("/statut", response_model=PointageStatus)
 async def get_pointage_status(
     current_user: dict = Depends(get_current_active_user),
@@ -165,7 +60,7 @@ async def get_pointage_status(
         .order_by(Pointage.debut.desc())
     )
     current = result.scalar_one_or_none()
-    
+
     return {
         "is_clocked_in": current is not None,
         "current_pointage": current
@@ -218,14 +113,14 @@ async def clock_out(
         .order_by(Pointage.debut.desc())
     )
     current = result.scalar_one_or_none()
-    
+
     if not current:
         raise HTTPException(400, "Aucun pointage en cours trouvé.")
 
     current.fin = datetime.utcnow()
     delta = current.fin - current.debut
     current.duree_minutes = int(delta.total_seconds() / 60)
-    
+
     await db.commit()
     await db.refresh(current)
     return current
@@ -269,6 +164,58 @@ async def get_attendance_summary(
     }
 
 
+@router.get("/admin/rapport.csv")
+async def export_admin_report_csv(
+    utilisateur_id: int,
+    date_debut: date,
+    date_fin: date,
+    current_user: dict = Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Exporte en CSV les pointages réels d'un personnel sur une période."""
+    if date_fin < date_debut:
+        raise HTTPException(400, "La date de fin doit être postérieure ou égale à la date de début")
+
+    target_user = await db.scalar(select(Utilisateur).where(
+        Utilisateur.id == utilisateur_id,
+        Utilisateur.clinic_id == current_user["clinic_id"],
+    ))
+    if not target_user:
+        raise HTTPException(404, "Utilisateur non trouvé dans votre clinique.")
+
+    pointages = (await db.execute(
+        select(Pointage).where(
+            Pointage.utilisateur_id == utilisateur_id,
+            Pointage.clinic_id == current_user["clinic_id"],
+            Pointage.debut >= datetime.combine(date_debut, datetime.min.time()),
+            Pointage.debut <= datetime.combine(date_fin, datetime.max.time()),
+            Pointage.fin.is_not(None),
+        ).order_by(Pointage.debut.asc())
+    )).scalars().all()
+
+    output = StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\r\n")
+    writer.writerow(["Personnel", "Email", "Date", "Arrivée", "Départ", "Durée (minutes)", "Notes"])
+    for pointage in pointages:
+        writer.writerow([
+            f"{target_user.prenom} {target_user.nom}",
+            target_user.email,
+            pointage.debut.date().isoformat(),
+            pointage.debut.isoformat(),
+            pointage.fin.isoformat() if pointage.fin else "",
+            pointage.duree_minutes or 0,
+            pointage.notes or "",
+        ])
+    writer.writerow([])
+    writer.writerow(["Total", "", "", "", "", sum(p.duree_minutes or 0 for p in pointages), ""])
+    filename = f"reporting-rh-{target_user.prenom}-{target_user.nom}-{date_debut.isoformat()}-{date_fin.isoformat()}.csv".replace(" ", "-")
+    return StreamingResponse(
+        iter(["\\ufeff" + output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/admin/rapport", response_model=UserReport)
 async def get_admin_report(
     utilisateur_id: int,
@@ -278,34 +225,45 @@ async def get_admin_report(
     db: AsyncSession = Depends(get_db)
 ):
     """Génère le rapport de présence pour un employé sur une période donnée."""
-    return await _build_admin_report(
-        utilisateur_id,
-        date_debut,
-        date_fin,
-        current_user["clinic_id"],
-        db,
-    )
+    if date_fin < date_debut:
+        raise HTTPException(400, "La date de fin doit être postérieure ou égale à la date de début")
 
-
-@router.get("/admin/rapport.pdf")
-async def export_admin_report_pdf(
-    utilisateur_id: int,
-    date_debut: date,
-    date_fin: date,
-    current_user: dict = Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ADMIN)),
-    db: AsyncSession = Depends(get_db),
-):
-    """Exporte le rapport RH PDF uniquement pour la clinique et les rôles administratifs autorisés."""
-    report = await _build_admin_report(
-        utilisateur_id,
-        date_debut,
-        date_fin,
-        current_user["clinic_id"],
-        db,
+    # Vérifier que l'utilisateur appartient à la même clinique
+    user_res = await db.execute(
+        select(Utilisateur).where(Utilisateur.id == utilisateur_id, Utilisateur.clinic_id == current_user["clinic_id"])
     )
-    filename = f"rapport-rh-{report.utilisateur_id}-{date_debut.isoformat()}-{date_fin.isoformat()}.pdf"
-    return StreamingResponse(
-        io.BytesIO(_render_attendance_pdf(report, date_debut, date_fin)),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    target_user = user_res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(404, "Utilisateur non trouvé dans votre clinique.")
+
+    # Récupérer les pointages terminés sur la période
+    pointages_res = await db.execute(
+        select(Pointage)
+        .where(
+            Pointage.utilisateur_id == utilisateur_id,
+            Pointage.clinic_id == current_user["clinic_id"],
+            Pointage.debut >= datetime.combine(date_debut, datetime.min.time()),
+            Pointage.debut <= datetime.combine(date_fin, datetime.max.time()),
+            Pointage.fin.is_not(None)
+        )
+        .order_by(Pointage.debut.asc())
+    )
+    pointages = pointages_res.scalars().all()
+
+    total_min = sum((p.duree_minutes or 0) for p in pointages)
+
+    details = [
+        PointageReportItem(
+            date=p.debut.date(),
+            debut=p.debut,
+            fin=p.fin,
+            duree_minutes=p.duree_minutes or 0
+        ) for p in pointages
+    ]
+
+    return UserReport(
+        utilisateur_id=utilisateur_id,
+        nom_complet=f"{target_user.prenom} {target_user.nom}",
+        total_minutes=total_min,
+        details=details
     )

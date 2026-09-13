@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 import pytest
+from datetime import timezone
 from sqlalchemy import select
 
 from api.v1.clinical_operations import (
@@ -52,6 +53,23 @@ async def test_realised_session_creates_one_followup(db, medecin, patient, acte)
 
 
 @pytest.mark.asyncio
+async def test_realised_session_accepts_timezone_aware_datetime(db, medecin, patient, acte):
+    cure = await create_cure(CureCreate(
+        patient_id=patient.id, acte_id=acte.id, nom="Cure timezone", seances_prevues=1,
+    ), {"id": medecin.id, "role": "medecin", "clinic_id": 1}, db)
+    session_id = cure["seances"][0]["id"]
+    aware = datetime.utcnow().replace(tzinfo=timezone.utc)
+    result = await update_cure_session(
+        cure_id=cure["id"],
+        seance_id=session_id,
+        payload=SeanceStatusPatch(statut="realisee", realisee_at=aware),
+        current_user={"id": medecin.id, "role": "medecin", "clinic_id": 1},
+        db=db,
+    )
+    assert result["seances"][0]["statut"] == "realisee"
+
+
+@pytest.mark.asyncio
 async def test_adverse_event_is_scoped_to_authenticated_clinic(db, medecin, patient):
     result = await create_adverse_event(
         EvenementCreate(
@@ -66,6 +84,21 @@ async def test_adverse_event_is_scoped_to_authenticated_clinic(db, medecin, pati
     event = await db.scalar(select(EvenementIndesirable).where(EvenementIndesirable.id == result["id"]))
     assert event is not None
     assert event.clinic_id == 1
+
+
+@pytest.mark.asyncio
+async def test_adverse_event_accepts_timezone_aware_datetime(db, medecin, patient):
+    result = await create_adverse_event(
+        EvenementCreate(
+            patient_id=patient.id,
+            survenu_at=datetime.utcnow().replace(tzinfo=timezone.utc),
+            description="Réaction synthétique timezone",
+            gravite="faible",
+        ),
+        {"id": medecin.id, "role": "medecin", "clinic_id": 1},
+        db,
+    )
+    assert result["statut"] == "ouvert"
 
 
 @pytest.mark.asyncio

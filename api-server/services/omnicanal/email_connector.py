@@ -4,7 +4,6 @@ AutoCommerce Clinic — Connecteur Email (Bloc 1)
 Supporte Resend.com via API HTTP.
 """
 
-import base64
 import logging
 from typing import Optional
 
@@ -98,25 +97,20 @@ class EmailConnector(ChannelAdapter):
         if not self._is_configured:
             return {"success": False, "status": "not_configured", "details": "Email non configuré", "external_message_id": None}
         
-        # Resend accepte un contenu base64 ; le document médical ne passe donc
-        # pas par une URL publique. L'URL reste acceptée pour les usages non
-        # sensibles déjà présents dans le connecteur.
-        if not media_bytes and not media_url:
-            return {"success": False, "status": "failed", "details": "Pièce jointe absente", "external_message_id": None}
+        # Resend attend un champ 'attachments' : [{"filename": "...", "content": "base64..."} ou {"path": "url"}]
+        # Implémentation simplifiée via URL
+        if not media_url:
+            return {"success": False, "status": "failed", "details": "media_url requis pour les pièces jointes email", "external_message_id": None}
 
-        from_addr = kwargs.get("from_address") or get_settings().smtp_from
-        filename = kwargs.get("filename") or (media_url.split("/")[-1] if media_url else "document.pdf")
-        attachment = (
-            {"filename": filename, "content": base64.b64encode(media_bytes).decode("ascii")}
-            if media_bytes is not None
-            else {"path": media_url, "filename": filename}
-        )
+        from_addr = get_settings().smtp_from
         payload = {
             "from": from_addr,
             "to": [contact_id],
             "subject": caption or "Document de votre clinique",
             "html": f"<p>{caption or 'Veuillez trouver ci-joint votre document.'}</p>",
-            "attachments": [attachment],
+            "attachments": [
+                {"path": media_url, "filename": media_url.split("/")[-1]}
+            ]
         }
 
         try:

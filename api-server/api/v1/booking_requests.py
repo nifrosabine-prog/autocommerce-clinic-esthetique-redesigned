@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_db
 from middleware.clinic_rbac import require_role
-from models.database import BookingRequest, RoleEnum
+from models.database import BookingRequest, RoleEnum, Utilisateur
 from services.booking_requests import approve_booking_request, reject_booking_request
 
 router = APIRouter(prefix="/booking-requests", tags=["booking-requests"])
@@ -16,6 +16,10 @@ router = APIRouter(prefix="/booking-requests", tags=["booking-requests"])
 
 class BookingRequestReject(BaseModel):
     notes: Optional[str] = Field(default=None, max_length=500)
+
+
+class BookingRequestAssign(BaseModel):
+    praticien_id: int = Field(gt=0)
 
 
 @router.get("")
@@ -30,6 +34,34 @@ async def list_booking_requests(
     query = query.order_by(BookingRequest.created_at.desc())
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.patch("/{booking_request_id}/assign")
+async def assign_booking_request(
+    booking_request_id: int,
+    payload: BookingRequestAssign,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+):
+    request = await db.scalar(select(BookingRequest).where(
+        BookingRequest.id == booking_request_id,
+        BookingRequest.clinic_id == current_user["clinic_id"],
+    ))
+    if not request:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande de réservation introuvable")
+    if request.statut != "pending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="La demande a déjà été traitée")
+    practitioner = await db.scalar(select(Utilisateur).where(
+        Utilisateur.id == payload.praticien_id,
+        Utilisateur.clinic_id == current_user["clinic_id"],
+        Utilisateur.is_active.is_(True),
+        Utilisateur.role.in_([RoleEnum.MEDECIN.value, RoleEnum.ESTHETICIENNE.value]),
+    ))
+    if not practitioner:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Praticien actif introuvable")
+    request.praticien_id = practitioner.id
+    await db.flush()
+    return request
 
 
 @router.post("/{booking_request_id}/approve")

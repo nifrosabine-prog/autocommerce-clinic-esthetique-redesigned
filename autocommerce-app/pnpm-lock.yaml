@@ -229,7 +229,7 @@ importers:
         specifier: ^10.4.20
         version: 10.5.4(postcss@8.5.26)
       esbuild:
-        specifier: ^0.25.0
+        specifier: 0.25.12
         version: 0.25.12
       jsdom:
         specifier: ^30.0.1

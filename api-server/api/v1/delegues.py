@@ -3,11 +3,11 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from api.deps import get_db
 from middleware.clinic_rbac import require_role
-from models.database import RoleEnum, LaboratoirePartenaire, VisiteDelegue
+from models.database import RoleEnum, LaboratoirePartenaire, DelegueMedical, VisiteDelegue
 
 router = APIRouter(prefix="/delegues", tags=["delegues"])
 
@@ -32,6 +32,25 @@ class VisiteCreate(BaseModel):
     objet: str
     compte_rendu: Optional[str] = None
     echantillons_recus: Optional[dict] = None
+
+@router.get("/delegues", response_model=List[dict])
+async def list_delegues(db: AsyncSession = Depends(get_db), current_user=Depends(require_role(RoleEnum.ADMIN, RoleEnum.DIRECTRICE, RoleEnum.MEDECIN))):
+    result = await db.execute(
+        select(DelegueMedical).where(DelegueMedical.clinic_id == current_user["clinic_id"]).order_by(DelegueMedical.nom, DelegueMedical.prenom)
+    )
+    return [{"id": d.id, "nom": d.nom, "prenom": d.prenom, "nom_complet": f"{d.prenom} {d.nom}", "labo_id": d.labo_id} for d in result.scalars().all()]
+
+@router.post("/delegues", status_code=status.HTTP_201_CREATED)
+async def create_delegue(payload: DelegueCreate, db: AsyncSession = Depends(get_db), current_user=Depends(require_role(RoleEnum.ADMIN, RoleEnum.DIRECTRICE))):
+    labo = await db.scalar(select(LaboratoirePartenaire).where(LaboratoirePartenaire.id == payload.labo_id, LaboratoirePartenaire.clinic_id == current_user["clinic_id"]))
+    if not labo:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Laboratoire non trouvé")
+    delegue = DelegueMedical(**payload.model_dump(), clinic_id=current_user["clinic_id"])
+    db.add(delegue)
+    await db.commit()
+    await db.refresh(delegue)
+    return {"id": delegue.id, "nom": delegue.nom, "prenom": delegue.prenom, "nom_complet": f"{delegue.prenom} {delegue.nom}", "labo_id": delegue.labo_id}
 
 @router.get("/labos", response_model=List[dict])
 async def list_labos(db: AsyncSession = Depends(get_db), current_user=Depends(require_role(RoleEnum.ADMIN, RoleEnum.DIRECTRICE, RoleEnum.MEDECIN))):
@@ -66,8 +85,15 @@ async def list_visites(db: AsyncSession = Depends(get_db), current_user=Depends(
     } for v in visites]
 
 @router.post("/visites", status_code=status.HTTP_201_CREATED)
+
 async def create_visite(payload: VisiteCreate, db: AsyncSession = Depends(get_db), current_user=Depends(require_role(RoleEnum.ADMIN, RoleEnum.DIRECTRICE, RoleEnum.MEDECIN))):
-    visite = VisiteDelegue(**payload.model_dump(), clinic_id=current_user["clinic_id"])
+    values = payload.model_dump()
+    visit_dt = values.get("date_visite")
+    if visit_dt is not None and visit_dt.tzinfo is not None:
+        # La colonne PostgreSQL est TIMESTAMP WITHOUT TIME ZONE : on stocke une
+        # valeur UTC naïve pour éviter le mélange aware/naive envoyé par le navigateur.
+        values["date_visite"] = visit_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    visite = VisiteDelegue(**values, clinic_id=current_user["clinic_id"])
     db.add(visite)
     await db.commit()
     await db.refresh(visite)

@@ -100,6 +100,14 @@ async def test_get_timeline_patient_masks_observations_for_directrice():
         )
         assert timeline_med[0]["observations"] == "REAL_OBSERVATIONS"
         assert timeline_med[0]["effets_secondaires"] == "some effects"
+
+        timeline_esth = await get_timeline_patient(
+            patient_id=1, db=db, user_role="estheticienne", clinic_id=1
+        )
+        assert timeline_esth[0]["observations"] == "[ACCÈS MÉDICAL RÉSERVÉ]"
+        assert timeline_esth[0]["effets_secondaires"] == "[ACCÈS RÉSERVÉ]"
+        assert timeline_esth[0]["zones_traitees"] == {}
+        assert timeline_esth[0]["satisfaction"] == 5
         
         services.dossier_medical.decrypt_field = original_decrypt
 

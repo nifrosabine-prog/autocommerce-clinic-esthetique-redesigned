@@ -79,8 +79,8 @@ async def test_assistant_readonly_rejects_write(db, medecin, whitelist_medecin):
         current_user=current_user,
         db=db,
     )
-    assert result["statut"] == "refuse"
-    assert "ne peux pas encore" in result["reponse"].lower()
+    assert result["statut"] == "proposition"
+    assert "confirmer" in result["reponse"].lower()
 
 @pytest.mark.asyncio
 async def test_assistant_rate_limit(db, medecin, whitelist_medecin):
@@ -169,7 +169,7 @@ def test_detect_intent_darija_stock():
 
 def test_detect_intent_darija_cancel_rdv_is_write_intent():
     intent, params = _detect_intent("الغي موعد بكري")
-    assert intent == "annuler_rdv"
+    assert intent == "proposer_annulation"
 
 
 def test_detect_intent_darija_unrelated_text_stays_unknown():

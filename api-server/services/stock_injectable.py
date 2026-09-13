@@ -1,6 +1,6 @@
 """
 AutoCommerce Clinic — Gestion stock injectables
-Scan, traçabilité, alertes, utilisation
+Scan, traçabilité, alertes, utilisation, réceptions, registre de mouvements
 """
 
 from dataclasses import dataclass
@@ -19,9 +19,13 @@ from models.database import (
     Utilisateur,
     Patient,
     DossierMedical,
+    MouvementLotInjectable,
+    TypeMouvementLot,
 )
 from services.qr_injectable import decode_scan
 from services.tenant_scope import resolve_clinic_id
+from services.stock_alerts import sync_stock_alert
+from models.episode_core import Intervention
 
 
 def _resolve_usage_datetime(date_injection: Optional[datetime]) -> datetime:
@@ -49,6 +53,7 @@ class LotDetail:
     date_expiration: date
     statut: str
     jours_avant_expiration: int
+
     stock_minimum: Decimal
     stock_alerte: Decimal
 
@@ -136,6 +141,8 @@ async def register_usage(
     date_injection: Optional[datetime] = None,
     notes: Optional[str] = None,
     clinic_id: Optional[int] = None,
+    episode_id: Optional[int] = None,
+    intervention_id: Optional[int] = None,
 ) -> UtilisationLot:
     """Débite le stock d'un lot et crée une utilisation.
 
@@ -143,7 +150,7 @@ async def register_usage(
     - Lot existe et disponible
     - Quantité suffisante (avec verrou pessimiste anti race-condition)
     - Lot non expiré
-    - Quantité strictement positive
+    - Quant strictement positive
 
     Correctif Bug #1 (audit) :
     - Cast strict Decimal(str(quantite)) pour éviter la propagation d'un
@@ -171,10 +178,6 @@ async def register_usage(
         )
 
     # ── 2. Chargement du lot avec verrou pessimiste ───────────
-    # ``with_for_update()`` empêche deux appels concurrents de lire
-    # simultanément la même quantité_restante et de la décrémenter
-    # tous les deux (double-spend). La ligne est verrouillée jusqu'à
-    # la fin de la transaction.
     result = await db.execute(
         select(LotInjectable, ProduitInjectable)
         .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
@@ -209,6 +212,20 @@ async def register_usage(
         ))
         if not dossier:
             raise ValueError("Dossier hors clinique ou patient incohérent")
+        if episode_id is None:
+            episode_id = dossier.episode_id
+        elif dossier.episode_id is not None and dossier.episode_id != episode_id:
+            raise ValueError("Le dossier et l'épisode ne correspondent pas")
+
+    if intervention_id is not None:
+        intervention = await db.scalar(select(Intervention).where(
+            Intervention.id == intervention_id,
+            Intervention.clinic_id == clinic_id,
+            Intervention.episode_id == episode_id,
+            Intervention.professionnel_id == praticien_id,
+        ))
+        if not intervention:
+            raise ValueError("Intervention hors épisode, clinique ou praticien")
 
     # ── 3. Vérifications métier ───────────────────────────────
     if lot.statut in (StatutLot.EPUISE.value, StatutLot.EXPIRE.value, StatutLot.RETIRE.value):
@@ -219,8 +236,6 @@ async def register_usage(
         await db.flush()
         raise ValueError("Lot expiré — utilisation impossible")
 
-    # Cast défensif de la valeur ORM (peut arriver en float sur certains
-    # dialectes ou après un refresh partiel).
     stock_actuel = Decimal(str(lot.quantite_restante))
 
     if stock_actuel < quantite:
@@ -232,8 +247,6 @@ async def register_usage(
     # ── 4. Débit atomique ─────────────────────────────────────
     nouveau_stock = stock_actuel - quantite
 
-    # Garde-fou : ne doit jamais descendre en négatif après le check
-    # ci-dessus, mais on blinde en cas de race condition résiduelle.
     if nouveau_stock < 0:
         raise ValueError(
             f"Stock insuffisant après vérification concurrente : "
@@ -242,22 +255,17 @@ async def register_usage(
 
     lot.quantite_restante = nouveau_stock
 
-    # Mise à jour du statut selon le nouveau niveau de stock
     if nouveau_stock == 0:
         lot.quantite_restante = Decimal("0.00")
         lot.statut = StatutLot.EPUISE.value
     elif nouveau_stock <= Decimal(str(produit.stock_minimum)):
         lot.statut = StatutLot.QUARANTAINE.value
 
-    # Flush intermédiaire pour verrouiller la décrémentation en base
-    # AVANT de créer l'utilisation. Si ce flush échoue (contrainte,
-    # déconnexion), l'UtilisationLot ne sera jamais créé.
     await db.flush()
 
     # ── 5. Création de l'utilisation ──────────────────────────
     usage_datetime = _resolve_usage_datetime(date_injection)
 
-    # Calcul de la date de prochaine injection basée sur la durée d'effet du produit
     prochaine_date = None
     if produit.duree_effet_jours and produit.duree_effet_jours > 0:
         prochaine_date = (usage_datetime + timedelta(days=produit.duree_effet_jours)).date()
@@ -267,6 +275,8 @@ async def register_usage(
         lot_id=lot_id,
         dossier_id=dossier_id,
         patient_id=patient_id,
+        episode_id=episode_id,
+        intervention_id=intervention_id,
         praticien_id=praticien_id,
         date_utilisation=usage_datetime,
         quantite_utilisee=quantite,
@@ -280,7 +290,21 @@ async def register_usage(
     await db.flush()
     await db.refresh(utilisation)
 
-    # ── 6. Alertes post-utilisation ───────────────────────────
+    # ── 6. Journalisation du mouvement (registre d'audit) ─────
+    mouvement = MouvementLotInjectable(
+        clinic_id=lot.clinic_id,
+        lot_id=lot_id,
+        type_mouvement=TypeMouvementLot.INJECTION.value,
+        quantite=-quantite,
+        date_mouvement=usage_datetime,
+        utilisateur_id=praticien_id,
+        motif=type_injection or "Injection",
+    )
+    db.add(mouvement)
+    await db.flush()
+    await db.refresh(mouvement)
+
+    # ── 7. Alertes post-utilisation ───────────────────────────
     await _check_single_lot_alert(lot, produit, db)
 
     return utilisation
@@ -288,8 +312,222 @@ async def register_usage(
 
 async def _check_single_lot_alert(lot: LotInjectable, produit: ProduitInjectable, db: AsyncSession):
     """Vérifie si une alerte doit être déclenchée après utilisation."""
-    # Si stock très bas, on pourrait déclencher une tâche Celery ici
-    pass
+    return await sync_stock_alert(
+        db, clinic_id=lot.clinic_id, type_article="injectable",
+        article_nom=produit.nom, stock_actuel=lot.quantite_restante,
+        seuil_alerte=produit.stock_alerte, stock_minimum=produit.stock_minimum,
+        produit_id=produit.id, lot_id=lot.id,
+    )
+
+
+# ── Réception / réapprovisionnement ───────────────────────
+
+async def _recompute_lot_statut(lot: LotInjectable, produit: ProduitInjectable) -> None:
+    """Recalcule le statut du lot après un mouvement de stock.
+
+    - stock ≤ 0 → épuisé
+    - stock ≤ stock_minimum → quarantaine
+    - sinon → disponible (sauf expiration déjà passée)
+    """
+    if lot.date_expiration < date.today():
+        lot.statut = StatutLot.EXPIRE.value
+        return
+    stock = Decimal(str(lot.quantite_restante))
+    if stock <= 0:
+        lot.statut = StatutLot.EPUISE.value
+    elif stock <= Decimal(str(produit.stock_minimum)):
+        lot.statut = StatutLot.QUARANTAINE.value
+    else:
+        lot.statut = StatutLot.DISPONIBLE.value
+
+
+async def register_reception(
+    lot_id: int,
+    quantite: Decimal,
+    db: AsyncSession,
+    utilisateur_id: Optional[int] = None,
+    motif: Optional[str] = None,
+    reference: Optional[str] = None,
+    document_url: Optional[str] = None,
+    date_expiration: Optional[date] = None,
+    fournisseur: Optional[str] = None,
+    prix_achat_lot: Optional[Decimal] = None,
+    clinic_id: Optional[int] = None,
+) -> MouvementLotInjectable:
+    """Crédite le stock d'un lot existant et journalise une réception.
+
+    Évolution « Ajouter du stock / Réception » au scan :
+    - verrou pessimiste ``FOR UPDATE`` pour sérialiser le crédit ;
+    - recalcul du statut (réactivation d'un lot épuisé, quarantaine sous le seuil) ;
+    - un lot ``retiré`` (rappel) ne peut jamais être réapprovisionné ;
+    - un lot ``expiré`` n'est réactivé que si une nouvelle date d'expiration
+      valide est fournie.
+    """
+    clinic_id = resolve_clinic_id(clinic_id)
+    try:
+        quantite = Decimal(str(quantite))
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        raise ValueError(f"Quantité invalide : {quantite!r}") from exc
+
+    if quantite <= 0:
+        raise ValueError("La quantité reçue doit être strictement positive")
+
+    result = await db.execute(
+        select(LotInjectable, ProduitInjectable)
+        .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
+        .where(
+            LotInjectable.id == lot_id,
+            LotInjectable.clinic_id == clinic_id,
+            ProduitInjectable.clinic_id == clinic_id,
+        )
+        .with_for_update(of=LotInjectable)
+    )
+    row = result.first()
+    if not row:
+        raise ValueError(f"Lot {lot_id} non trouvé")
+
+    lot, produit = row
+
+    if lot.statut == StatutLot.RETIRE.value:
+        raise ValueError("Lot retiré (rappel) — réapprovisionnement impossible")
+
+    nouvelle_expiration = lot.date_expiration
+    if date_expiration is not None:
+        nouvelle_expiration = date_expiration
+        if nouvelle_expiration < date.today():
+            raise ValueError("La date d'expiration doit être dans le futur")
+
+    if lot.date_expiration < date.today() and date_expiration is None:
+        raise ValueError(
+            "Lot expiré — fournir une nouvelle date d'expiration pour la réception"
+        )
+
+    if fournisseur is not None:
+        lot.fournisseur = fournisseur
+    if prix_achat_lot is not None:
+        try:
+            lot.prix_achat_lot = Decimal(str(prix_achat_lot))
+        except (ArithmeticError, ValueError, TypeError):
+            raise ValueError("Prix d'achat invalide")
+    if nouvelle_expiration != lot.date_expiration:
+        lot.date_expiration = nouvelle_expiration
+
+    stock_actuel = Decimal(str(lot.quantite_restante))
+    lot.quantite_restante = stock_actuel + quantite
+    await _recompute_lot_statut(lot, produit)
+    await db.flush()
+
+    mouvement = MouvementLotInjectable(
+        clinic_id=clinic_id,
+        lot_id=lot_id,
+        type_mouvement=TypeMouvementLot.RECEPTION.value,
+        quantite=quantite,
+        date_mouvement=datetime.utcnow(),
+        utilisateur_id=utilisateur_id,
+        motif=motif,
+        reference=reference,
+        document_url=document_url,
+    )
+    db.add(mouvement)
+    await db.flush()
+    await db.refresh(mouvement)
+    await _check_single_lot_alert(lot, produit, db)
+    return mouvement
+
+
+# ── Registre des mouvements ────────────────────────────────
+
+def _mouvement_to_dict(mvt: MouvementLotInjectable, lot: LotInjectable, produit: ProduitInjectable) -> dict:
+    return {
+        "mouvement_id": mvt.id,
+        "lot_id": mvt.lot_id,
+        "produit_nom": produit.nom,
+        "numero_lot": lot.numero_lot,
+        "type_mouvement": mvt.type_mouvement,
+        "quantite": float(mvt.quantite),
+        "date_mouvement": mvt.date_mouvement.isoformat(),
+        "utilisateur_id": mvt.utilisateur_id,
+        "motif": mvt.motif,
+        "reference": mvt.reference,
+    }
+
+
+async def get_lot_mouvements(
+    lot_id: int,
+    db: AsyncSession,
+    clinic_id: Optional[int] = None,
+    limit: int = 50,
+) -> List[dict]:
+    """Retourne l'historique des mouvements d'un lot donné (plus récent d'abord)."""
+    clinic_id = resolve_clinic_id(clinic_id)
+    result = await db.execute(
+        select(MouvementLotInjectable, LotInjectable, ProduitInjectable)
+        .join(LotInjectable, MouvementLotInjectable.lot_id == LotInjectable.id)
+        .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
+        .where(
+            MouvementLotInjectable.clinic_id == clinic_id,
+            MouvementLotInjectable.lot_id == lot_id,
+        )
+        .order_by(MouvementLotInjectable.date_mouvement.desc())
+        .limit(limit)
+    )
+    return [_mouvement_to_dict(m, lot, prod) for m, lot, prod in result.all()]
+
+
+async def get_recent_mouvements(
+    db: AsyncSession,
+    clinic_id: Optional[int] = None,
+    limit: int = 12,
+) -> List[dict]:
+    """Retourne les derniers mouvements de stock de la clinique (registre d'audit)."""
+    clinic_id = resolve_clinic_id(clinic_id)
+    result = await db.execute(
+        select(MouvementLotInjectable, LotInjectable, ProduitInjectable)
+        .join(LotInjectable, MouvementLotInjectable.lot_id == LotInjectable.id)
+        .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
+        .where(MouvementLotInjectable.clinic_id == clinic_id)
+        .order_by(MouvementLotInjectable.date_mouvement.desc())
+        .limit(limit)
+    )
+    return [_mouvement_to_dict(m, lot, prod) for m, lot, prod in result.all()]
+
+
+async def get_mouvements_filtered(
+    db: AsyncSession,
+    clinic_id: Optional[int] = None,
+    date_debut: Optional[date] = None,
+    date_fin: Optional[date] = None,
+    lot_id: Optional[int] = None,
+    type_mouvement: Optional[str] = None,
+    limit: int = 500,
+) -> List[dict]:
+    """Registre des mouvements filtré — alimente l'export PDF d'audit (V2.3).
+
+    Filtres optionnels : plage de dates, lot précis, type de mouvement.
+    Tri du plus récent au plus ancien.
+    """
+    clinic_id = resolve_clinic_id(clinic_id)
+    stmt = (
+        select(MouvementLotInjectable, LotInjectable, ProduitInjectable)
+        .join(LotInjectable, MouvementLotInjectable.lot_id == LotInjectable.id)
+        .join(ProduitInjectable, LotInjectable.produit_id == ProduitInjectable.id)
+        .where(MouvementLotInjectable.clinic_id == clinic_id)
+    )
+    if date_debut is not None:
+        stmt = stmt.where(
+            MouvementLotInjectable.date_mouvement >= datetime.combine(date_debut, datetime.min.time())
+        )
+    if date_fin is not None:
+        stmt = stmt.where(
+            MouvementLotInjectable.date_mouvement <= datetime.combine(date_fin, datetime.max.time())
+        )
+    if lot_id is not None:
+        stmt = stmt.where(MouvementLotInjectable.lot_id == lot_id)
+    if type_mouvement is not None:
+        stmt = stmt.where(MouvementLotInjectable.type_mouvement == type_mouvement)
+    stmt = stmt.order_by(MouvementLotInjectable.date_mouvement.desc()).limit(limit)
+    result = await db.execute(stmt)
+    return [_mouvement_to_dict(m, lot, prod) for m, lot, prod in result.all()]
 
 
 # ── Alertes stock ──────────────────────────────────────────
@@ -329,12 +567,12 @@ async def check_stock_alerts(db: AsyncSession, clinic_id: Optional[int] = None) 
                 lot_id=lot.id,
             ))
         # ORANGE
-        elif lot.quantite_restante <= produit.stock_minimum or jours <= 30:
+        elif lot.quantite_restante <= produit.stock_alerte or jours <= 30:
             alerts.append(StockAlert(
                 niveau="orange",
                 produit_nom=produit.nom,
                 numero_lot=lot.numero_lot,
-                message=f"{lot.quantite_restante} {produit.unite} restant — expire dans {jours}j" if jours <= 30 else f"Stock bas : {lot.quantite_restante} {produit.unite}",
+                message=f"{lot.quantite_restante} {produit.unite} restant — expire dans {jours}j" if jours <= 30 else f"Stock sous le seuil : {lot.quantite_restante} {produit.unite}",
                 lot_id=lot.id,
             ))
         # VERT (info)

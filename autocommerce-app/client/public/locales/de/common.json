@@ -13,7 +13,19 @@
     "french": "Französisch",
     "english": "Englisch",
     "italian": "Italienisch",
-    "german": "Deutsch"
+    "german": "Deutsch",
+    "role": "Rolle",
+    "success": "Vorgang erfolgreich",
+    "error": "Ein Fehler ist aufgetreten",
+    "loading": "Wird geladen...",
+    "confirm": "Sind Sie sicher?",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "delete": "Löschen",
+    "edit": "Bearbeiten",
+    "add": "Hinzufügen",
+    "search": "Suchen...",
+    "no_data": "Keine Daten verfügbar"
   },
   "auth": {
     "email": "E-Mail",
@@ -22,7 +34,9 @@
     "forgotPassword": "Passwort vergessen",
     "rememberMe": "Angemeldet bleiben",
     "mfaRequired": "Zwei-Faktor-Authentifizierung erforderlich",
-    "mfaCode": "Authentifizierungscode"
+    "mfaCode": "Authentifizierungscode",
+    "access_denied": "Zugriff verweigert",
+    "no_permission": "Sie haben keine Berechtigung für diese Seite."
   },
   "patients": {
     "title": "Patientenverwaltung",
@@ -38,7 +52,8 @@
     "loyaltyLevel": "Treueprogramm-Stufe",
     "medicalFile": "Patientenakte",
     "consent": "Zustimmung",
-    "photos": "Fotos"
+    "photos": "Fotos",
+    "no_patient_found": "Kein Patient gefunden"
   },
   "agenda": {
     "title": "Terminkalender",
@@ -80,7 +95,30 @@
     "revenue": "Umsatz",
     "appointments": "Termine",
     "patients": "Patienten",
-    "performance": "Leistung"
+    "performance": "Leistung",
+    "clinical_pilot": "Klinische Steuerung",
+    "greeting": "Guten Tag {{name}}",
+    "you": "Ihnen",
+    "subtitle": "Ein klarer Überblick über die wichtigsten Aktivitäten Ihrer Klinik – ohne unnötige Kennzahlen.",
+    "today": "Heute",
+    "today_appointments_helper": "Tagesagenda",
+    "stock_alerts_helper": "zu überwachende Produkte",
+    "unpaid_invoices_helper": "ausstehende Zahlungen",
+    "social_messages_helper": "neue Social-Anfragen",
+    "operational_status": "Betriebsstatus",
+    "operational_description": "Die Kennzahlen stammen aus den Modulen Agenda, Lager, Abrechnung und Social CRM. Nutzen Sie die Karten oben für den direkten Zugriff auf die passende Aktion.",
+    "daily_priority": "Priorität des Tages",
+    "check_stock": "Lager prüfen",
+    "follow_payments": "Zahlungen verfolgen",
+    "all_under_control": "Alles unter Kontrolle",
+    "quick_access": "Schnellzugriff",
+    "from_metric_to_action": "Von der Kennzahl zur Aktion",
+    "shortcuts_description": "Die Verknüpfungen behalten die bestehenden Routen bei.",
+    "quick_actions": "Schnellaktionen",
+    "social_messages": "Social-Nachrichten",
+    "stock_alerts": "Lagerwarnungen",
+    "today_appointments": "Heutige Termine",
+    "unpaid_invoices": "Offene Rechnungen"
   },
   "simulation": {
     "title": "KI-Morphing-Simulation",
@@ -98,5 +136,52 @@
     "cancel": "Abbrechen",
     "save": "Speichern",
     "delete": "Löschen"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "dashboard_ia": "KI-Dashboard",
+    "workflows": "KI-Automatisierung",
+    "copilote_crm": "CRM-Copilot",
+    "analytics": "Business Intelligence",
+    "agenda": "Agenda",
+    "patients": "Patienten",
+    "medical_file": "Patientenakte",
+    "stock": "Lagerverwaltung",
+    "invoices": "Rechnungen und Ausgaben",
+    "commissions": "Provisionen",
+    "loyalty": "Treue und Empfehlungen",
+    "recruitment": "Recruiting",
+    "social": "Social CRM",
+    "team": "Teamnachrichten",
+    "settings": "Einstellungen",
+    "clinical_ops": "Behandlungsverfolgung",
+    "delegates": "Vertreter und Labore",
+    "team_management": "Teamverwaltung",
+    "rooms": "Raumverwaltung",
+    "hr_reporting": "HR-Bericht",
+    "medical_acts": "Medizinische Leistungen"
+  },
+  "roles": {
+    "directrice": "Direktorin",
+    "admin": "Administrator",
+    "assistante": "Assistenz",
+    "medecin": "Arzt",
+    "estheticienne": "Kosmetikerin",
+    "praticien": "Behandler",
+    "commercial": "Vertrieb",
+    "unknown": "Benutzer"
+  },
+  "landing": {
+    "eyebrow": "Ästhetische Medizin",
+    "navLabel": "Hauptnavigation",
+    "nav": {
+      "about": "Über uns",
+      "services": "Behandlungen",
+      "contact": "Kontakt"
+    },
+    "call": "Anrufen",
+    "book": "Termin buchen",
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen"
   }
 }

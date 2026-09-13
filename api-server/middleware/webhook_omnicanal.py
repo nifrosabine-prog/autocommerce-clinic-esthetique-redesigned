@@ -285,6 +285,43 @@ async def process_incoming_webhook(
         )
         results.append(result)
 
+        # Réponse automatique de Lina au PATIENT (WhatsApp uniquement, texte
+        # uniquement — jamais sur un vocal non transcrit ni sur un message
+        # dupliqué/rejeté ci-dessus, qui ont `continue` avant ce point).
+        # Corrige une lacune de câblage : jusqu'ici seuls les numéros
+        # whitelistés (staff/direction, Bloc 9) recevaient une réponse
+        # automatique ; un vrai patient n'obtenait aucune réponse de Lina.
+        if channel == "whatsapp" and processed_content and not transcription_failed:
+            try:
+                from services.lina_patient_reply import handle_patient_whatsapp
+
+                conversation = result.get("conversation")
+                patient_obj = None
+                if conversation is not None and getattr(conversation, "patient_id", None):
+                    from models.database import Patient
+                    patient_obj = await db.get(Patient, conversation.patient_id)
+
+                reponse = await handle_patient_whatsapp(
+                    content=processed_content,
+                    patient=patient_obj,
+                    clinic_id=clinic_id,
+                    db=db,
+                )
+                if reponse and conversation is not None:
+                    from services.omnicanal_service import send_reply as _send_lina_reply
+                    await _send_lina_reply(
+                        conversation_id=conversation.id,
+                        content=reponse,
+                        db=db,
+                        clinic_id=clinic_id,
+                    )
+            except Exception:
+                # Ne jamais casser la persistance du webhook pour une
+                # réponse automatique en échec (règle : fail-safe, pas
+                # fail-open) — le message reste visible dans l'inbox pour
+                # traitement manuel par l'équipe.
+                logger.exception("lina_patient_auto_reply_failed clinic_id=%s", clinic_id)
+
     logger.info(f"Webhook {channel} processed: {len(results)} messages persisted")
     return {
         "canal": channel,

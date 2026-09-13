@@ -23,8 +23,15 @@ class PointsRequest(BaseModel):
 @router.get("")
 async def overview_route(
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(require_role(RoleEnum.DIRECTRICE, RoleEnum.ASSISTANTE, RoleEnum.ADMIN)),
+    current_user=Depends(require_role(
+        RoleEnum.DIRECTRICE,
+        RoleEnum.ASSISTANTE,
+        RoleEnum.ADMIN,
+        RoleEnum.MEDECIN,
+        RoleEnum.ESTHETICIENNE,
+    )),
 ):
+    # Lecture autorisée aux rôles cliniques, toujours limitée au tenant du token.
     return await get_overview(db, clinic_id=current_user["clinic_id"])
 
 

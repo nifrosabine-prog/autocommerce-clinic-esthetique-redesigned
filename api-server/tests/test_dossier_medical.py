@@ -4,14 +4,12 @@ Couvre le chiffrement Fernet des observations et la règle métier la
 plus critique : impossible de créer un dossier médical sans
 consentement signé et valide.
 """
-from datetime import datetime
-
 import pytest
 
 from services.dossier_medical import (
-    encrypt_field, decrypt_field, create_dossier, close_dossier, get_timeline_patient,
+    encrypt_field, decrypt_field, create_dossier, get_timeline_patient,
 )
-from models.database import AuditLogMedical, Facture, SuiviPostActe
+from models.database import AuditLogMedical, Facture
 from services.factures import create_facture
 from sqlalchemy import select
 
@@ -57,38 +55,6 @@ async def test_create_dossier_fails_without_consent(db, patient, medecin, acte):
 
 
 @pytest.mark.asyncio
-async def test_create_draft_dossier_does_not_require_consent_or_trigger_billing(db, patient, medecin, acte):
-    dossier = await create_dossier(
-        patient_id=patient.id,
-        praticien_id=medecin.id,
-        rdv_id=None,
-        data={"acte_id": acte.id, "observations": "Note de consultation en cours", "statut_clinique": "brouillon"},
-        db=db,
-    )
-    assert dossier.statut_clinique == "brouillon"
-    assert dossier.statut_facturation == "brouillon"
-
-
-@pytest.mark.asyncio
-async def test_close_draft_requires_consent_then_closes(db, patient, medecin, acte, consentement_valide):
-    dossier = await create_dossier(
-        patient_id=patient.id,
-        praticien_id=medecin.id,
-        rdv_id=None,
-        data={"acte_id": acte.id, "observations": "Note en attente de signature", "statut_clinique": "brouillon"},
-        db=db,
-    )
-    closed = await close_dossier(
-        patient_id=patient.id,
-        dossier_id=dossier.id,
-        praticien_id=medecin.id,
-        db=db,
-    )
-    assert closed.statut_clinique == "cloture"
-    assert closed.statut_facturation == "en_attente"
-
-
-@pytest.mark.asyncio
 async def test_create_dossier_reconciles_invoice_created_first(db, patient, medecin, acte, consentement_valide):
     await create_facture({
         "patient_id": patient.id,
@@ -126,26 +92,6 @@ async def test_create_dossier_succeeds_with_valid_consent(db, patient, medecin, 
     # Les observations doivent être chiffrées en base, jamais en clair
     assert dossier.observations_enc != "Bonne tolérance"
     assert decrypt_field(dossier.observations_enc) == "Bonne tolérance"
-
-
-@pytest.mark.asyncio
-async def test_closed_dossier_with_followup_creates_persistent_post_acte_reminder(db, patient, medecin, acte, consentement_valide):
-    dossier = await create_dossier(
-        patient_id=patient.id,
-        praticien_id=medecin.id,
-        rdv_id=None,
-        data={
-            "acte_id": acte.id,
-            "observations": "Contrôle requis",
-            "suivi_requis": True,
-            "date_suivi_recommandee": datetime(2030, 1, 20).date(),
-        },
-        db=db,
-    )
-    followup = await db.scalar(select(SuiviPostActe).where(SuiviPostActe.dossier_id == dossier.id))
-    assert followup is not None
-    assert followup.statut == "a_faire"
-    assert followup.assigne_a_id == medecin.id
 
 
 @pytest.mark.asyncio

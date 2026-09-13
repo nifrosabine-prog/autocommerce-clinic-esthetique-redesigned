@@ -13,7 +13,19 @@
     "french": "Francese",
     "english": "Inglese",
     "italian": "Italiano",
-    "german": "Tedesco"
+    "german": "Tedesco",
+    "role": "Ruolo",
+    "success": "Operazione riuscita",
+    "error": "Si è verificato un errore",
+    "loading": "Caricamento...",
+    "confirm": "Confermare?",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "add": "Aggiungi",
+    "search": "Cerca...",
+    "no_data": "Nessun dato disponibile"
   },
   "auth": {
     "email": "Email",
@@ -22,7 +34,9 @@
     "forgotPassword": "Password dimenticata",
     "rememberMe": "Ricordami",
     "mfaRequired": "Autenticazione a due fattori richiesta",
-    "mfaCode": "Codice di autenticazione"
+    "mfaCode": "Codice di autenticazione",
+    "access_denied": "Accesso negato",
+    "no_permission": "Non hai i permessi per accedere a questa pagina."
   },
   "patients": {
     "title": "Gestione Pazienti",
@@ -38,7 +52,8 @@
     "loyaltyLevel": "Livello Fedeltà",
     "medicalFile": "Cartella Clinica",
     "consent": "Consenso",
-    "photos": "Foto"
+    "photos": "Foto",
+    "no_patient_found": "Nessun paziente trovato"
   },
   "agenda": {
     "title": "Agenda",
@@ -80,7 +95,30 @@
     "revenue": "Ricavi",
     "appointments": "Appuntamenti",
     "patients": "Pazienti",
-    "performance": "Prestazioni"
+    "performance": "Prestazioni",
+    "clinical_pilot": "Gestione clinica",
+    "greeting": "Buongiorno {{name}}",
+    "you": "a lei",
+    "subtitle": "Una visione chiara delle attività essenziali della clinica, senza rumore né metriche decorative.",
+    "today": "Oggi",
+    "today_appointments_helper": "agenda del giorno",
+    "stock_alerts_helper": "prodotti da monitorare",
+    "unpaid_invoices_helper": "in attesa di pagamento",
+    "social_messages_helper": "nuove richieste social",
+    "operational_status": "Stato operativo",
+    "operational_description": "Gli indicatori provengono dai moduli Agenda, Inventario, Fatturazione e Social CRM. Usa le schede sopra per accedere direttamente all’azione utile.",
+    "daily_priority": "Priorità del giorno",
+    "check_stock": "Controlla l’inventario",
+    "follow_payments": "Segui i pagamenti",
+    "all_under_control": "Tutto sotto controllo",
+    "quick_access": "Accesso rapido",
+    "from_metric_to_action": "Dall’indicatore all’azione",
+    "shortcuts_description": "I collegamenti mantengono le route esistenti.",
+    "quick_actions": "Azioni rapide",
+    "social_messages": "Messaggi social",
+    "stock_alerts": "Avvisi inventario",
+    "today_appointments": "Appuntamenti di oggi",
+    "unpaid_invoices": "Fatture da seguire"
   },
   "simulation": {
     "title": "Simulazione Morphing IA",
@@ -98,5 +136,52 @@
     "cancel": "Annulla",
     "save": "Salva",
     "delete": "Elimina"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "dashboard_ia": "Dashboard IA",
+    "workflows": "Automazioni IA",
+    "copilote_crm": "Copilota CRM",
+    "analytics": "Business Intelligence",
+    "agenda": "Agenda",
+    "patients": "Pazienti",
+    "medical_file": "Cartella clinica",
+    "stock": "Gestione inventario",
+    "invoices": "Fatture e spese",
+    "commissions": "Commissioni",
+    "loyalty": "Fedeltà e referral",
+    "recruitment": "Selezione",
+    "social": "Social CRM",
+    "team": "Messaggistica del team",
+    "settings": "Impostazioni",
+    "clinical_ops": "Monitoraggio cure",
+    "delegates": "Delegati e laboratori",
+    "team_management": "Gestione team",
+    "rooms": "Gestione sale",
+    "hr_reporting": "Report HR",
+    "medical_acts": "Prestazioni mediche"
+  },
+  "roles": {
+    "directrice": "Direttrice",
+    "admin": "Amministratore",
+    "assistante": "Assistente",
+    "medecin": "Medico",
+    "estheticienne": "Estetista",
+    "praticien": "Professionista",
+    "commercial": "Commerciale",
+    "unknown": "Utente"
+  },
+  "landing": {
+    "eyebrow": "Medicina estetica",
+    "navLabel": "Navigazione principale",
+    "nav": {
+      "about": "Chi siamo",
+      "services": "Trattamenti",
+      "contact": "Contatti"
+    },
+    "call": "Chiama",
+    "book": "Prenota un appuntamento",
+    "openMenu": "Apri menu",
+    "closeMenu": "Chiudi menu"
   }
 }

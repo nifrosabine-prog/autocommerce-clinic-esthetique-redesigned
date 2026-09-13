@@ -20,6 +20,7 @@ from sqlalchemy import select
 settings = get_settings()
 
 BRANDING_KEY = "branding"
+PUBLIC_DEMO_MARKERS = ("demo", "synthetic", "railway", "audit validation", "test environment")
 
 DEFAULT_BRANDING = {
     "nom_clinique": "AutoCommerce Clinic",
@@ -58,6 +59,17 @@ async def get_branding(db: AsyncSession, clinic_id: int | None = None) -> dict:
     merged = {**DEFAULT_BRANDING, **stored}
     merged["contenu_landing"] = {**DEFAULT_BRANDING["contenu_landing"], **stored.get("contenu_landing", {})}
     return merged
+
+
+def sanitize_public_branding(branding: dict) -> dict:
+    """Ne jamais publier une adresse ou coordonnée explicitement synthétique."""
+    public = {**branding, "contenu_landing": {**(branding.get("contenu_landing") or {})}}
+    landing = public["contenu_landing"]
+    for key in ("adresse", "ville", "telephone", "whatsapp", "email"):
+        value = str(landing.get(key) or "")
+        if any(marker in value.lower() for marker in PUBLIC_DEMO_MARKERS):
+            landing[key] = ""
+    return public
 
 
 async def get_branding_context(db: AsyncSession, clinic_id: int | None = None) -> dict:
@@ -137,13 +149,14 @@ async def generate_marketing_summary(db: AsyncSession, clinic_id: int, acts: lis
 
 async def get_public_content(db: AsyncSession, clinic_id: int) -> dict:
     """Consolide tout le contenu nécessaire à la landing page dynamique."""
-    branding = await get_branding(db, clinic_id=clinic_id)
+    branding = sanitize_public_branding(await get_branding(db, clinic_id=clinic_id))
     
     # Récupérer les actes actifs
     res_actes = await db.execute(
         select(ActeMedical)
         .where(ActeMedical.clinic_id == clinic_id)
         .where(ActeMedical.is_active)
+        .where(ActeMedical.is_public)
         .order_by(ActeMedical.categorie, ActeMedical.nom)
     )
     actes = res_actes.scalars().all()

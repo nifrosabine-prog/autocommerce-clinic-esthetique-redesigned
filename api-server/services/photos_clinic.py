@@ -23,6 +23,7 @@ from models.database import PhotoClinic, TypePhoto
 from services.consentement import verify_consent
 from services.audit_medical import log_access
 from services.branding import get_branding_context
+from services.clinical_scope import validate_episode_intervention_scope
 
 settings = get_settings()
 # Défense contre les decompression bombs : limite indépendante de la taille compressée.
@@ -236,6 +237,8 @@ async def upload_photo(
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
     clinic_id: int = 1,
+    episode_id: Optional[int] = None,
+    intervention_id: Optional[int] = None,
 ) -> PhotoClinic:
     """Upload et traitement complet d'une photo médicale.
 
@@ -256,6 +259,13 @@ async def upload_photo(
     ))
     if not patient:
         raise ValueError("Patient introuvable dans cette clinique")
+    await validate_episode_intervention_scope(
+        db,
+        patient_id=patient_id,
+        clinic_id=clinic_id,
+        episode_id=episode_id,
+        intervention_id=intervention_id,
+    )
     if dossier_id is not None:
         dossier = await db.scalar(select(DossierMedical).where(
             DossierMedical.id == dossier_id,
@@ -373,6 +383,8 @@ async def upload_photo(
         clinic_id=clinic_id,
         patient_id=patient_id,
         dossier_id=dossier_id,
+        episode_id=episode_id,
+        intervention_id=intervention_id,
         type=type_photo,
         date_prise=datetime.utcnow(),
         zone_anatomique=zone,

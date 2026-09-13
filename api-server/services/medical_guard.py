@@ -24,6 +24,7 @@ ESCALATION_PATTERNS = (
     r"résultat médical", r"resultat medical", r"traitement", r"médicament",
     r"medicament", r"normal après", r"normal apres", r"شنوة الدوا", r"وجيعة",
     r"حساسية", r"التهاب", r"جرعة", r"طبيب.*قال",
+    r"chest pain", r"shortness of breath", r"bleeding", r"injection",
 )
 
 ACTION_PATTERNS = (
@@ -49,7 +50,7 @@ def escalation_message(language: str = "fr") -> str:
     if language == "darija":
         return "هالطلب طبي وما نجمش نعطي تشخيص ولا دواء. يلزمك تتصل بالطبيب أو بالطوارئ إذا الحالة مستعجلة."
     if language == "en":
-        return "This is a medical question. I cannot diagnose, prescribe, or assess an emergency. Please contact a doctor, or emergency services if urgent."
+        return "This is a medical question. I cannot provide medical advice, prescribe, or assess an emergency. Please contact a doctor, or emergency services if urgent."
     if language == "it":
         return "Questa è una domanda medica. Non posso diagnosticare né prescrivere. Contatti un medico o i servizi di emergenza se è urgente."
     if language == "de":

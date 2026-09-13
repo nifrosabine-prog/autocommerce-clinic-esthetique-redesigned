@@ -17,6 +17,18 @@ from models.database import Parrainage, Patient
 from services import fidelite
 
 
+class ParrainageError(ValueError):
+    """Erreur métier contrôlable du programme de parrainage."""
+
+
+class PatientParrainageNotFound(ParrainageError):
+    """Patient absent, anonymisé ou appartenant à une autre clinique."""
+
+
+class ParrainageInvalid(ParrainageError):
+    """Code invalide, déjà utilisé ou auto-parrainage."""
+
+
 def _resolve_clinic_id(clinic_id: Optional[int]) -> int:
     if clinic_id is not None and int(clinic_id) > 0:
         return int(clinic_id)
@@ -57,7 +69,9 @@ class ParrainageService:
             )
         )
         if not patient:
-            raise ValueError("Patient non trouvé dans cette clinique")
+            raise PatientParrainageNotFound(
+                "Patient non trouvé, anonymisé ou absent de cette clinique"
+            )
 
         code = ParrainageService.generer_code_unique(patient.nom)
         new_p = Parrainage(
@@ -85,8 +99,12 @@ class ParrainageService:
                 Parrainage.clinic_id == clinic_id,
             )
         )
-        if not parrainage or parrainage.parrain_patient_id == filleul_id:
-            return False
+        if not parrainage:
+            raise ParrainageInvalid("Code de parrainage invalide ou déjà utilisé")
+        if parrainage.parrain_patient_id == filleul_id:
+            raise ParrainageInvalid(
+                "Un patient ne peut pas être son propre filleul"
+            )
 
         patients = await db.execute(
             select(Patient).where(
@@ -97,7 +115,9 @@ class ParrainageService:
         )
         patient_ids = {patient.id for patient in patients.scalars().all()}
         if {parrainage.parrain_patient_id, filleul_id} - patient_ids:
-            return False
+            raise PatientParrainageNotFound(
+                "Le parrain ou le filleul n'existe pas dans cette clinique"
+            )
 
         parrainage.filleul_patient_id = filleul_id
         parrainage.statut = "utilise"

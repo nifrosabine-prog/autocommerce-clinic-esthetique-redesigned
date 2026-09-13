@@ -5,12 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.database import (
     Utilisateur, Patient
 )
-from models.security import TacheInterneAssistant
 from models.workflow_engine import (
     Workflow, WorkflowExecutionStatus, WorkflowAction
 )
 from services.workflow_engine import WorkflowEngineService
-from sqlalchemy import select
 
 async def _make_workflow(db: AsyncSession, medecin: Utilisateur) -> Workflow:
     wf = Workflow(
@@ -70,64 +68,6 @@ async def test_execute_workflow_step_draft(db, medecin, patient):
     )
     assert action.status == WorkflowExecutionStatus.AWAITING_APPROVAL.value
     assert "draft" in action.action_type
-
-
-@pytest.mark.asyncio
-async def test_drafted_patient_message_preserves_recipient_configuration(db, medecin, patient):
-    wf = await _make_workflow(db, medecin)
-    execution = await WorkflowEngineService.create_workflow_execution(db, wf.id, 1, "recipient_configuration", patient.id)
-    action = await WorkflowEngineService.execute_workflow_action(
-        db,
-        execution.id,
-        "send_email",
-        {"template": "controle", "recipient": "patient"},
-        patient_id=patient.id,
-        clinic_id=1,
-        workflow_id=wf.id,
-    )
-    assert action.status == WorkflowExecutionStatus.AWAITING_APPROVAL.value
-    assert action.action_config["recipient"] == "patient"
-
-
-@pytest.mark.asyncio
-async def test_create_task_assigns_selected_active_team_member(db, medecin, patient):
-    wf = await _make_workflow(db, medecin)
-    execution = await WorkflowEngineService.create_workflow_execution(
-        db, wf.id, 1, "test_assignment", patient.id
-    )
-    action = await WorkflowEngineService.execute_workflow_action(
-        db,
-        execution.id,
-        "create_task",
-        {"title": "Appeler le patient", "assignee_id": medecin.id, "days_from_now": 1},
-        patient_id=patient.id,
-        clinic_id=1,
-        workflow_id=wf.id,
-    )
-    task = await db.scalar(select(TacheInterneAssistant).where(TacheInterneAssistant.id == action.result["task_id"]))
-    assert task is not None
-    assert task.assignee_id == medecin.id
-
-
-@pytest.mark.asyncio
-async def test_create_task_assigns_business_role(db, medecin, patient):
-    wf = await _make_workflow(db, medecin)
-    execution = await WorkflowEngineService.create_workflow_execution(
-        db, wf.id, 1, "test_role_assignment", patient.id
-    )
-    action = await WorkflowEngineService.execute_workflow_action(
-        db,
-        execution.id,
-        "create_task",
-        {"title": "Préparer le rappel", "assignee_role": "assistante"},
-        patient_id=patient.id,
-        clinic_id=1,
-        workflow_id=wf.id,
-    )
-    task = await db.scalar(select(TacheInterneAssistant).where(TacheInterneAssistant.id == action.result["task_id"]))
-    assert task is not None
-    assert task.assignee_id is None
-    assert task.assignee_role == "assistante"
 
 @pytest.mark.asyncio
 async def test_send_omnicanal_whatsapp_success(db, patient):

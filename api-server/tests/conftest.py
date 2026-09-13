@@ -22,7 +22,7 @@ TEST_DATA_ROOT.mkdir(parents=True, exist_ok=True)
 (TEST_DATA_ROOT / "branding").mkdir(parents=True, exist_ok=True)
 (TEST_DATA_ROOT / "backups").mkdir(parents=True, exist_ok=True)
 
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 os.environ.setdefault("REDIS_URL", "redis://:test-only@localhost:6379/0")
 os.environ.setdefault("CORS_ORIGINS", "http://testserver")
 os.environ.setdefault("FERNET_KEY", Fernet.generate_key().decode())
@@ -91,7 +91,7 @@ async def db(engine):
 async def medecin(db):
     user = Utilisateur(
         clinic_id=1, email="medecin@clinic.tn", hashed_password="x",
-        nom="Trabelsi", prenom="Sami", role=RoleEnum.MEDECIN.value, is_public=True,
+        nom="Trabelsi", prenom="Sami", role=RoleEnum.MEDECIN.value,
     )
     db.add(user)
     await db.flush()
@@ -124,8 +124,7 @@ async def patient(db):
 async def acte(db):
     a = ActeMedical(
         clinic_id=1, nom="Botox front", categorie="injectable",
-        nom_normalise="botox front", duree_minutes=30,
-        prix_base=Decimal("250.000"), is_gratuit=False, is_public=True,
+        duree_minutes=30, prix_base=Decimal("250.000"),
     )
     db.add(a)
     await db.flush()

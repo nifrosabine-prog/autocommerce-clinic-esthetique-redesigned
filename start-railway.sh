@@ -4,9 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR/api-server"
 
-echo "Running database migrations..."
-alembic upgrade head
-
 if [[ "${SEED_ACTES_RECETTE:-false}" == "true" ]]; then
   echo "Seeding recipe acts..."
   python scripts/seed_actes_recette.py

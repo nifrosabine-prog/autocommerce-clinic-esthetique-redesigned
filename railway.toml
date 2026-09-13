@@ -3,7 +3,8 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "bash /app/start-railway.sh"
+startCommand = "uvicorn main:app --app-dir /app/api-server --host 0.0.0.0 --port ${PORT:-8000}"
+preDeployCommand = ["bash -lc 'cd /app/api-server && alembic upgrade head'"]
 healthcheckPath = "/health"
 # Les migrations Alembic s’exécutent avant Uvicorn au premier démarrage.
 # 300 s évite un échec réseau prématuré sur Railway.

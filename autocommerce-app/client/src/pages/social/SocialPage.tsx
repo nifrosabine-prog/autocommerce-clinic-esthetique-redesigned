@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,24 +49,24 @@ interface SocialAvis {
   created_at: string;
 }
 
-const MESSAGE_STATUT: Record<string, { label: string; color: string }> = {
-  nouveau: { label: 'Nouveau', color: 'bg-yellow-100 text-yellow-800' },
-  traite: { label: 'Traité', color: 'bg-blue-100 text-blue-800' },
-  repondu: { label: 'Répondu', color: 'bg-green-100 text-green-800' },
+const MESSAGE_COLORS: Record<string, string> = {
+  nouveau: 'bg-yellow-100 text-yellow-800',
+  traite: 'bg-blue-100 text-blue-800',
+  repondu: 'bg-green-100 text-green-800',
 };
 
-const POST_STATUT: Record<string, { label: string; color: string }> = {
-  brouillon: { label: 'Brouillon', color: 'bg-gray-100 text-gray-800' },
-  planifie: { label: 'Planifié', color: 'bg-blue-100 text-blue-800' },
-  publie: { label: 'Publié', color: 'bg-green-100 text-green-800' },
-  echec: { label: 'Échec', color: 'bg-red-100 text-red-800' },
+const POST_COLORS: Record<string, string> = {
+  brouillon: 'bg-gray-100 text-gray-800',
+  planifie: 'bg-blue-100 text-blue-800',
+  publie: 'bg-green-100 text-green-800',
+  echec: 'bg-red-100 text-red-800',
 };
 
-const AVIS_STATUT: Record<string, { label: string; color: string }> = {
-  nouveau: { label: 'Nouveau', color: 'bg-yellow-100 text-yellow-800' },
-  suggere: { label: 'IA Suggérée', color: 'bg-purple-100 text-purple-800' },
-  valide: { label: 'Validé', color: 'bg-blue-100 text-blue-800' },
-  publie: { label: 'Publié', color: 'bg-green-100 text-green-800' },
+const AVIS_COLORS: Record<string, string> = {
+  nouveau: 'bg-yellow-100 text-yellow-800',
+  suggere: 'bg-purple-100 text-purple-800',
+  valide: 'bg-blue-100 text-blue-800',
+  publie: 'bg-green-100 text-green-800',
 };
 
 // WhatsApp est le seul canal réellement branché (webhook + token Meta) à
@@ -81,6 +82,7 @@ const DEFAULT_PLATFORM_STATUS: Record<string, 'connecte' | 'non_connecte'> = {
 };
 
 export default function SocialPage() {
+  const { t, i18n } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [messages, setMessages] = useState<SocialMessage[]>([]);
   const [posts, setPosts] = useState<SocialPost[]>([]);
@@ -116,7 +118,7 @@ export default function SocialPage() {
         if (section === 'avis') setAvis(data);
       } else {
         console.error(`Failed to load social ${section}:`, result.reason);
-        errors[section] = 'Cette section est momentanément indisponible.';
+        errors[section] = t('social.sectionUnavailable');
       }
     });
     const integrationResult = results[3];
@@ -131,7 +133,7 @@ export default function SocialPage() {
     }
     setSectionErrors(errors);
     if (Object.keys(errors).length > 0) {
-      toast.error('Certaines données sociales sont momentanément indisponibles');
+      toast.error(t('social.dataUnavailable'));
     }
     setIsLoading(false);
   };
@@ -139,10 +141,10 @@ export default function SocialPage() {
   const handlePublierPost = async (post: SocialPost) => {
     try {
       await api.post(`/social/posts/${post.id}/publier`);
-      toast.success('Post publié');
+      toast.success(t('social.postPublished'));
       loadSocialData();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la publication');
+      toast.error(err.response?.data?.detail || t('social.publishError'));
     }
   };
 
@@ -159,18 +161,18 @@ export default function SocialPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Social CRM</h1>
-            <p className="text-muted-foreground mt-1">Gestion des réseaux sociaux</p>
+            <h1 className="text-3xl font-bold">{t('social.title')}</h1>
+            <p className="text-muted-foreground mt-1">{t('social.subtitle')}</p>
           </div>
           <Button onClick={() => setNewPostOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Nouveau post
+            {t('social.newPost')}
           </Button>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">État des connexions</CardTitle>
+            <CardTitle className="text-sm">{t('social.connections')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-4">
@@ -180,7 +182,7 @@ export default function SocialPage() {
                   <div className="flex items-center gap-2 mt-2">
                     <div className={`w-2 h-2 rounded-full ${status === 'connecte' ? 'bg-green-500' : 'bg-gray-400'}`} />
                     <span className="text-xs text-muted-foreground">
-                      {status === 'connecte' ? 'Connecté' : 'Non connecté'}
+                      {status === 'connecte' ? t('social.connected') : t('social.notConnected')}
                     </span>
                   </div>
                 </div>
@@ -191,9 +193,9 @@ export default function SocialPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
-            <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
-            <TabsTrigger value="avis">Avis ({avis.length})</TabsTrigger>
+            <TabsTrigger value="messages">{t('social.tab_messages', { count: messages.length })}</TabsTrigger>
+            <TabsTrigger value="posts">{t('social.tab_posts', { count: posts.length })}</TabsTrigger>
+            <TabsTrigger value="avis">{t('social.tab_avis', { count: avis.length })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="messages" className="space-y-4">
@@ -201,38 +203,38 @@ export default function SocialPage() {
               <CardContent className="pt-6">
                 {sectionErrors.messages && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.messages}</p>}
                 {messages.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucun message</p>
+                  <p className="text-center text-muted-foreground py-8">{t('social.noMessage')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Plateforme</TableHead>
-                          <TableHead>Contact</TableHead>
-                          <TableHead>Contenu</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('social.plateforme')}</TableHead>
+                          <TableHead>{t('social.contact')}</TableHead>
+                          <TableHead>{t('social.contenu')}</TableHead>
+                          <TableHead>{t('social.statut')}</TableHead>
+                          <TableHead>{t('social.date')}</TableHead>
+                          <TableHead>{t('social.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {messages.map((msg) => {
-                          const s = MESSAGE_STATUT[msg.statut] || { label: msg.statut, color: 'bg-gray-100 text-gray-800' };
+                          const color = MESSAGE_COLORS[msg.statut] || 'bg-gray-100 text-gray-800';
                           return (
                             <TableRow key={msg.id}>
                               <TableCell className="font-medium capitalize">{msg.plateforme}</TableCell>
                               <TableCell className="text-sm">{msg.contact_nom || msg.contact_id}</TableCell>
                               <TableCell className="text-sm max-w-xs truncate">{msg.contenu}</TableCell>
                               <TableCell>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${color}`}>{t(`social.msgStatut_${msg.statut}`, { defaultValue: msg.statut })}</span>
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">
-                                {new Date(msg.created_at).toLocaleDateString('fr-FR')}
+                                {new Date(msg.created_at).toLocaleDateString(i18n.language)}
                               </TableCell>
                               <TableCell>
                                 {msg.statut !== 'repondu' && (
                                   <Button variant="outline" size="sm" onClick={() => setReplyTarget(msg)}>
-                                    Répondre
+                                    {t('social.reply')}
                                   </Button>
                                 )}
                               </TableCell>
@@ -252,37 +254,37 @@ export default function SocialPage() {
               <CardContent className="pt-6">
                 {sectionErrors.posts && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.posts}</p>}
                 {posts.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucun post</p>
+                  <p className="text-center text-muted-foreground py-8">{t('social.noPost')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Plateforme</TableHead>
-                          <TableHead>Contenu</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Date prévue</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('social.plateforme')}</TableHead>
+                          <TableHead>{t('social.contenu')}</TableHead>
+                          <TableHead>{t('social.statut')}</TableHead>
+                          <TableHead>{t('social.datePrevue')}</TableHead>
+                          <TableHead>{t('social.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {posts.map((post) => {
-                          const s = POST_STATUT[post.statut] || { label: post.statut, color: 'bg-gray-100 text-gray-800' };
+                          const color = POST_COLORS[post.statut] || 'bg-gray-100 text-gray-800';
                           return (
                             <TableRow key={post.id}>
                               <TableCell className="font-medium capitalize">{post.plateforme}</TableCell>
                               <TableCell className="text-sm max-w-xs truncate">{post.contenu}</TableCell>
                               <TableCell>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${color}`}>{t(`social.postStatut_${post.statut}`, { defaultValue: post.statut })}</span>
                                 {post.erreur && <p className="text-xs text-destructive mt-1">{post.erreur}</p>}
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">
-                                {post.date_publication_prevue ? new Date(post.date_publication_prevue).toLocaleDateString('fr-FR') : '—'}
+                                {post.date_publication_prevue ? new Date(post.date_publication_prevue).toLocaleDateString(i18n.language) : '—'}
                               </TableCell>
                               <TableCell>
                                 {(post.statut === 'brouillon' || post.statut === 'planifie') && (
                                   <Button variant="outline" size="sm" onClick={() => handlePublierPost(post)}>
-                                    Publier
+                                    {t('social.publish')}
                                   </Button>
                                 )}
                               </TableCell>
@@ -302,38 +304,38 @@ export default function SocialPage() {
               <CardContent className="pt-6">
                 {sectionErrors.avis && <p role="alert" className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{sectionErrors.avis}</p>}
                 {avis.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucun avis client</p>
+                  <p className="text-center text-muted-foreground py-8">{t('social.noAvis')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Plateforme</TableHead>
-                          <TableHead>Auteur / Note</TableHead>
-                          <TableHead>Texte</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('social.plateforme')}</TableHead>
+                          <TableHead>{t('social.authorNote')}</TableHead>
+                          <TableHead>{t('social.texte')}</TableHead>
+                          <TableHead>{t('social.statut')}</TableHead>
+                          <TableHead>{t('social.actions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {avis.map((a) => {
-                          const s = AVIS_STATUT[a.statut] || { label: a.statut, color: 'bg-gray-100 text-gray-800' };
+                          const color = AVIS_COLORS[a.statut] || 'bg-gray-100 text-gray-800';
                           return (
                             <TableRow key={a.id}>
                               <TableCell className="font-medium capitalize">{a.plateforme}</TableCell>
                               <TableCell className="text-sm">
-                                <div className="font-semibold">{a.auteur_nom || 'Anonyme'}</div>
+                                <div className="font-semibold">{a.auteur_nom || t('social.anonymous')}</div>
                                 <div className="text-yellow-600">{a.note ? '★'.repeat(a.note) : '—'}</div>
                               </TableCell>
                               <TableCell className="text-sm max-w-md">
                                 <p className="line-clamp-2">{a.texte}</p>
                               </TableCell>
                               <TableCell>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${color}`}>{t(`social.avisStatut_${a.statut}`, { defaultValue: a.statut })}</span>
                               </TableCell>
                               <TableCell>
                                 <Button variant="outline" size="sm" onClick={() => setAvisTarget(a)}>
-                                  {a.statut === 'publie' ? 'Voir' : 'Répondre'}
+                                  {a.statut === 'publie' ? t('social.view') : t('social.reply')}
                                 </Button>
                               </TableCell>
                             </TableRow>
@@ -361,6 +363,7 @@ export default function SocialPage() {
 function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
   avis: SocialAvis | null; onOpenChange: () => void; onUpdated: () => void;
 }) {
+  const { t } = useTranslation();
   const [reponse, setReponse] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -377,9 +380,9 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
     try {
       const res = await api.post(`/social/avis/${avis.id}/suggerer-reponse`);
       setReponse(res.data.reponse_suggeree);
-      toast.success('Suggestion IA générée');
+      toast.success(t('social.iaGenerated'));
     } catch (err: any) {
-      toast.error('Erreur lors de la génération IA');
+      toast.error(t('social.iaError'));
     } finally {
       setIsGenerating(false);
     }
@@ -390,11 +393,11 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
     setIsSaving(true);
     try {
       await api.post(`/social/avis/${avis.id}/valider`, { reponse_finale: reponse.trim() });
-      toast.success('Réponse validée et publiée');
+      toast.success(t('social.validated'));
       onOpenChange();
       onUpdated();
     } catch (err: any) {
-      toast.error("Erreur lors de la validation");
+      toast.error(t('social.validationError'));
     } finally {
       setIsSaving(false);
     }
@@ -404,9 +407,9 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
     <Dialog open={!!avis} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Gérer l'avis client</DialogTitle>
+          <DialogTitle>{t('social.manageAvis')}</DialogTitle>
           <DialogDescription>
-            {avis?.auteur_nom} sur {avis?.plateforme} ({avis?.note}/5)
+            {avis?.auteur_nom} · {avis?.plateforme} ({avis?.note}/5)
           </DialogDescription>
         </DialogHeader>
         {avis && (
@@ -414,11 +417,11 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
         )}
         <div className="space-y-2 mt-4">
           <div className="flex justify-between items-center">
-            <Label htmlFor="avis-reply">Réponse à publier</Label>
+            <Label htmlFor="avis-reply">{t('social.replyToPublish')}</Label>
             {avis?.statut !== 'publie' && (
               <Button variant="ghost" size="sm" onClick={handleSuggestIA} disabled={isGenerating}>
                 {isGenerating ? <Spinner className="h-3 w-3 mr-2" /> : null}
-                Générer avec IA
+                {t('social.generateIA')}
               </Button>
             )}
           </div>
@@ -427,16 +430,16 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
             value={reponse}
             onChange={(e) => setReponse(e.target.value)}
             rows={6}
-            placeholder="Écrivez votre réponse ici..."
+            placeholder={t('social.replyPh')}
             disabled={avis?.statut === 'publie'}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onOpenChange}>Fermer</Button>
+          <Button variant="outline" onClick={onOpenChange}>{t('social.close')}</Button>
           {avis?.statut !== 'publie' && (
             <Button onClick={handleValidate} disabled={isSaving || !reponse.trim()}>
               {isSaving ? <Spinner className="h-4 w-4 mr-2" /> : null}
-              Valider et Publier
+              {t('social.validatePublish')}
             </Button>
           )}
         </DialogFooter>
@@ -450,21 +453,22 @@ function AvisReplyDialog({ avis, onOpenChange, onUpdated }: {
 function ReplyDialog({ message, onOpenChange, onReplied }: {
   message: SocialMessage | null; onOpenChange: () => void; onReplied: () => void;
 }) {
+  const { t } = useTranslation();
   const [contenu, setContenu] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   useEffect(() => setContenu(''), [message]);
 
   const handleSend = async () => {
     if (!message) return;
-    if (!contenu.trim()) { toast.error('Le message ne peut pas être vide'); return; }
+    if (!contenu.trim()) { toast.error(t('social.emptyMessage')); return; }
     setIsSaving(true);
     try {
       await api.post(`/social/messages/${message.id}/repondre`, { contenu: contenu.trim() });
-      toast.success('Réponse envoyée');
+      toast.success(t('social.replySent'));
       onOpenChange();
       onReplied();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'envoi");
+      toast.error(err.response?.data?.detail || t('social.replyError'));
     } finally {
       setIsSaving(false);
     }
@@ -474,19 +478,19 @@ function ReplyDialog({ message, onOpenChange, onReplied }: {
     <Dialog open={!!message} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Répondre</DialogTitle>
+          <DialogTitle>{t('social.reply')}</DialogTitle>
           <DialogDescription>{message?.contact_nom || message?.contact_id} — {message?.plateforme}</DialogDescription>
         </DialogHeader>
         {message && (
           <div className="bg-muted rounded-md p-3 text-sm text-muted-foreground">{message.contenu}</div>
         )}
         <div>
-          <Label htmlFor="reply">Votre réponse</Label>
+          <Label htmlFor="reply">{t('social.yourReply')}</Label>
           <Textarea id="reply" value={contenu} onChange={(e) => setContenu(e.target.value)} rows={4} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onOpenChange}>Annuler</Button>
-          <Button onClick={handleSend} disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Envoyer'}</Button>
+          <Button variant="outline" onClick={onOpenChange}>{t('social.cancel')}</Button>
+          <Button onClick={handleSend} disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('social.send')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -496,6 +500,7 @@ function ReplyDialog({ message, onOpenChange, onReplied }: {
 function NewPostDialog({ open, onOpenChange, onCreated }: {
   open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [plateforme, setPlateforme] = useState('whatsapp');
   const [contenu, setContenu] = useState('');
   const [datePublication, setDatePublication] = useState('');
@@ -507,7 +512,7 @@ function NewPostDialog({ open, onOpenChange, onCreated }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contenu.trim()) { toast.error('Le contenu est requis'); return; }
+    if (!contenu.trim()) { toast.error(t('social.contentRequired')); return; }
     setIsSaving(true);
     try {
       await api.post('/social/posts', {
@@ -515,11 +520,11 @@ function NewPostDialog({ open, onOpenChange, onCreated }: {
         contenu: contenu.trim(),
         date_publication_prevue: datePublication ? new Date(datePublication).toISOString() : undefined,
       });
-      toast.success('Post créé en brouillon');
+      toast.success(t('social.postCreated'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la création');
+      toast.error(err.response?.data?.detail || t('social.createError'));
     } finally {
       setIsSaving(false);
     }
@@ -529,12 +534,12 @@ function NewPostDialog({ open, onOpenChange, onCreated }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nouveau post</DialogTitle>
-          <DialogDescription>Créé en brouillon — publiez-le ensuite depuis la liste.</DialogDescription>
+          <DialogTitle>{t('social.newPostTitle')}</DialogTitle>
+          <DialogDescription>{t('social.newPostDesc')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="plateforme">Plateforme</Label>
+            <Label htmlFor="plateforme">{t('social.platformLabel')}</Label>
             <select id="plateforme" value={plateforme} onChange={(e) => setPlateforme(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
               <option value="whatsapp">WhatsApp</option>
               <option value="instagram">Instagram</option>
@@ -543,16 +548,16 @@ function NewPostDialog({ open, onOpenChange, onCreated }: {
             </select>
           </div>
           <div>
-            <Label htmlFor="contenu">Contenu</Label>
+            <Label htmlFor="contenu">{t('social.contentLabel')}</Label>
             <Textarea id="contenu" value={contenu} onChange={(e) => setContenu(e.target.value)} rows={4} />
           </div>
           <div>
-            <Label htmlFor="date-pub">Date de publication (optionnel)</Label>
+            <Label htmlFor="date-pub">{t('social.pubDateOptional')}</Label>
             <Input id="date-pub" type="datetime-local" value={datePublication} onChange={(e) => setDatePublication(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Créer'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('social.cancel')}</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('social.create')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

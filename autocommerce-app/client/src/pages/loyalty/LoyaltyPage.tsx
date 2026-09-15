@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ export default function LoyaltyPage() {
   const [totalPoints, setTotalPoints] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const canViewReferrals = ['directrice', 'assistante', 'admin'].includes(user?.role || '');
 
   useEffect(() => {
@@ -50,8 +52,8 @@ export default function LoyaltyPage() {
       console.error('Failed to load loyalty data:', err);
       setTransactions([]);
       setTotalPoints(0);
-      setError('Les données de fidélité sont momentanément indisponibles. Réessayez dans quelques instants.');
-      toast.error('Impossible de charger les données de fidélité');
+      setError(t('loyalty.errors.unavailable'));
+      toast.error(t('loyalty.errors.load'));
     } finally {
       setIsLoading(false);
     }
@@ -71,15 +73,15 @@ export default function LoyaltyPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Fidélité & Parrainage</h1>
-          <p className="text-muted-foreground mt-1">Gestion du programme de récompenses</p>
+          <h1 className="text-3xl font-bold">{t('loyalty.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('loyalty.subtitle')}</p>
         </div>
 
         {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
         <Tabs defaultValue="historique" className="w-full">
           <TabsList className={`grid w-full ${canViewReferrals ? 'grid-cols-2' : 'grid-cols-1'} mb-8`}>
-            <TabsTrigger value="historique">Historique & Points</TabsTrigger>
-            {canViewReferrals && <TabsTrigger value="parrainage">Parrainage</TabsTrigger>}
+            <TabsTrigger value="historique">{t('loyalty.tabs.history')}</TabsTrigger>
+            {canViewReferrals && <TabsTrigger value="parrainage">{t('loyalty.tabs.referral')}</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="historique" className="space-y-6">
@@ -87,31 +89,31 @@ export default function LoyaltyPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Gift className="w-5 h-5" />
-                  Points totaux
+                  {t('loyalty.totalPoints')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-primary">{totalPoints} pts</div>
+                <div className="text-3xl font-bold text-primary">{t('loyalty.pointsValue', { count: totalPoints })}</div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Historique des transactions</CardTitle>
+                <CardTitle>{t('loyalty.historyTitle')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {transactions.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucune transaction</p>
+                  <p className="text-center text-muted-foreground py-8">{t('loyalty.noTransactions')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Patient</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Points</TableHead>
-                          <TableHead>Motif</TableHead>
-                          <TableHead>Date</TableHead>
+                          <TableHead>{t('loyalty.colPatient')}</TableHead>
+                          <TableHead>{t('loyalty.colType')}</TableHead>
+                          <TableHead>{t('loyalty.colPoints')}</TableHead>
+                          <TableHead>{t('loyalty.colReason')}</TableHead>
+                          <TableHead>{t('loyalty.colDate')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -123,20 +125,20 @@ export default function LoyaltyPage() {
                                 {tx.type === 'gain' ? (
                                   <>
                                     <TrendingUp className="w-4 h-4 text-green-600" />
-                                    <span className="text-green-600">Gain</span>
+                                    <span className="text-green-600">{t('loyalty.typeGain')}</span>
                                   </>
                                 ) : (
                                   <>
                                     <TrendingDown className="w-4 h-4 text-red-600" />
-                                    <span className="text-red-600">Dépense</span>
+                                    <span className="text-red-600">{t('loyalty.typeSpend')}</span>
                                   </>
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="font-semibold">{tx.points} pts</TableCell>
+                            <TableCell className="font-semibold">{t('loyalty.pointsValue', { count: tx.points })}</TableCell>
                             <TableCell>{tx.motif}</TableCell>
                             <TableCell className="text-sm text-muted-foreground">
-                              {new Date(tx.date).toLocaleDateString('fr-FR')}
+                              {new Date(tx.date).toLocaleDateString(i18n.language)}
                             </TableCell>
                           </TableRow>
                         ))}

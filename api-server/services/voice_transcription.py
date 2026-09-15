@@ -22,6 +22,11 @@ _SUPPORTED_AUDIO_MIME_EXT = {
     "audio/amr": "amr",
     "audio/ogg": "ogg",
     "audio/opus": "ogg",
+    # Format produit par MediaRecorder dans le navigateur (dictée Scribe IA
+    # côté médecin) — absent jusqu'ici, ce qui faisait échouer systématiquement
+    # /scribe-ia/transcribe avec un 415 "Format audio non supporté" alors que
+    # Whisper (OpenAI) accepte nativement le webm.
+    "audio/webm": "webm",
 }
 
 

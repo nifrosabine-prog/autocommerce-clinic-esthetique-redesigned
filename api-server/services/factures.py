@@ -14,6 +14,7 @@ from sqlalchemy import select, func, or_
 from sqlalchemy.exc import IntegrityError
 
 from models.database import DossierMedical, Facture, Patient, StatutFacture
+from models.episode_core import Paiement
 from config import get_settings
 from services.commissions import create_commission
 from services.fidelite import add_points
@@ -250,7 +251,7 @@ async def create_facture(data: dict, created_by: int, db, clinic_id: int | None 
             continue
 
 
-async def marquer_payee(facture_id: int, mode_paiement: str, db, clinic_id: int | None = None) -> dict:
+async def marquer_payee(facture_id: int, mode_paiement: str, db, clinic_id: int | None = None, encaisse_par_id: int | None = None) -> dict:
     clinic_id = _resolve_service_clinic(clinic_id)
     result = await db.execute(select(Facture).where(
         Facture.id == facture_id, Facture.clinic_id == clinic_id,
@@ -267,7 +268,17 @@ async def marquer_payee(facture_id: int, mode_paiement: str, db, clinic_id: int 
     mode = (mode_paiement or "").strip().lower()
     if mode not in {"especes", "carte", "virement", "cheque", "autre"}:
         raise ValueError("Mode de paiement invalide")
+    encaisseur_id = encaisse_par_id or facture.created_by or 1
 
+    total_ttc = Decimal(str(facture.total_ttc))
+    if total_ttc > 0:
+        db.add(Paiement(
+            clinic_id=clinic_id,
+            facture_id=facture.id,
+            montant=total_ttc,
+            mode=mode,
+            encaisse_par_id=encaisseur_id,
+        ))
     facture.statut = StatutFacture.PAYEE.value
     facture.mode_paiement = mode_paiement
     await db.flush()

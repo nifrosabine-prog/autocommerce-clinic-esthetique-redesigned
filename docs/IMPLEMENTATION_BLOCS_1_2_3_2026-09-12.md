@@ -1,6 +1,6 @@
 # AutoCommerce Clinic — Livraison des blocs 1, 2 et 3
 
-**Date :** 12 septembre 2026
+**Date :** 12 septembre 2026  
 **Statut :** implanté, compilé, testé et archivé.
 
 ## Bloc 3 livré

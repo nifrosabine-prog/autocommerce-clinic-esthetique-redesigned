@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,6 +31,7 @@ interface DashboardIAData {
 }
 
 export default function DashboardIA() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function DashboardIA() {
           setDashboardData(response.data.data);
         }
       } catch (err: any) {
-        setError(err.message || 'Erreur lors du chargement du dashboard');
+        setError(err.message || t('dashboardIA.errorLoad'));
         console.error('Dashboard error:', err);
       } finally {
         setIsLoading(false);
@@ -85,7 +87,7 @@ export default function DashboardIA() {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
-          <p className="text-gray-500">Aucune donnée disponible</p>
+          <p className="text-gray-500">{t('dashboardIA.noData')}</p>
         </div>
       </DashboardLayout>
     );
@@ -98,15 +100,15 @@ export default function DashboardIA() {
       <div className="space-y-6">
         {/* Titre */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard IA</h1>
-          <p className="text-gray-600 mt-2">Vue d'ensemble intelligente de votre clinique</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('dashboardIA.title')}</h1>
+          <p className="text-gray-600 mt-2">{t('dashboardIA.subtitle')}</p>
         </div>
 
         {/* Résumé de la journée */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">RDV Aujourd'hui</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('dashboardIA.rdvToday')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -114,14 +116,14 @@ export default function DashboardIA() {
                 <Calendar className="w-8 h-8 text-blue-500 opacity-50" />
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                {daily_summary?.rdvs_tomorrow || 0} demain
+                {t('dashboardIA.tomorrow', { count: daily_summary?.rdvs_tomorrow || 0 })}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Revenus Aujourd'hui</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('dashboardIA.revenueToday')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -129,34 +131,34 @@ export default function DashboardIA() {
                 <DollarSign className="w-8 h-8 text-green-500 opacity-50" />
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                {daily_summary?.unpaid_invoices || 0} factures non payées
+                {t('dashboardIA.unpaidInvoices', { count: daily_summary?.unpaid_invoices || 0 })}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Alertes Stock</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('dashboardIA.stockAlerts')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="text-3xl font-bold text-orange-600">{daily_summary?.stock_alerts || 0}</div>
                 <AlertTriangle className="w-8 h-8 text-orange-500 opacity-50" />
               </div>
-              <p className="text-xs text-gray-500 mt-2">Produits à réapprovisionner</p>
+              <p className="text-xs text-gray-500 mt-2">{t('dashboardIA.restock')}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Patients VIP</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">{t('dashboardIA.vipPatients')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="text-3xl font-bold text-purple-600">{vip_patients?.total_vip || 0}</div>
                 <Users className="w-8 h-8 text-purple-500 opacity-50" />
               </div>
-              <p className="text-xs text-gray-500 mt-2">Clients fidèles</p>
+              <p className="text-xs text-gray-500 mt-2">{t('dashboardIA.loyalClients')}</p>
             </CardContent>
           </Card>
         </div>
@@ -167,7 +169,7 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
-                Rendez-vous d'aujourd'hui
+                {t('dashboardIA.todayAppointments')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -195,7 +197,7 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-blue-900">
                 <Zap className="w-5 h-5" />
-                Recommandations IA
+                {t('dashboardIA.aiRecommendations')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -207,7 +209,7 @@ export default function DashboardIA() {
                         <p className="font-medium text-gray-900">{rec.message}</p>
                         {rec.products && (
                           <p className="text-sm text-gray-600 mt-1">
-                            Produits: {rec.products.join(', ')}
+                            {t('dashboardIA.products', { list: rec.products.join(', ') })}
                           </p>
                         )}
                       </div>
@@ -216,7 +218,7 @@ export default function DashboardIA() {
                         rec.priority === 'high' ? 'bg-orange-100 text-orange-700' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {rec.priority}
+                        {t(`dashboardIA.priority_${rec.priority}`, { defaultValue: rec.priority })}
                       </span>
                     </div>
                   </div>
@@ -232,7 +234,7 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5" />
-                Patients absents ({absent_patients.total_absent_patients})
+                {t('dashboardIA.absentPatients', { count: absent_patients.total_absent_patients })}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -244,14 +246,14 @@ export default function DashboardIA() {
                       <p className="text-xs text-gray-600">{patient.telephone}</p>
                     </div>
                     <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                      {patient.absences} absence(s)
+                      {t('dashboardIA.absenceCount', { count: patient.absences })}
                     </span>
                   </div>
                 ))}
               </div>
               {absent_patients.total_absent_patients > 5 && (
                 <p className="text-xs text-gray-500 mt-2">
-                  +{absent_patients.total_absent_patients - 5} autres patients
+                  {t('dashboardIA.others', { count: absent_patients.total_absent_patients - 5 })}
                 </p>
               )}
             </CardContent>
@@ -264,22 +266,22 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-amber-900">
                 <AlertTriangle className="w-5 h-5" />
-                Risque d'annulation des prochains RDV
+                {t('dashboardIA.cancelRisk')}
               </CardTitle>
               <p className="text-sm text-amber-800">
-                Base clinique : {(cancellation_risk.clinic_baseline_risk * 100).toFixed(1)} % — historique de {cancellation_risk.historical_appointments} RDV
+                {t('dashboardIA.baseline', { risk: (cancellation_risk.clinic_baseline_risk * 100).toFixed(1), count: cancellation_risk.historical_appointments })}
               </p>
             </CardHeader>
             <CardContent>
               {cancellation_risk.appointments.length === 0 ? (
-                <p className="text-sm text-gray-600">Aucun rendez-vous à risque dans les 30 prochains jours.</p>
+                <p className="text-sm text-gray-600">{t('dashboardIA.noRisk')}</p>
               ) : (
                 <div className="space-y-2">
                   {cancellation_risk.appointments.slice(0, 8).map((item: any) => (
                     <div key={item.rdv_id} className="flex items-center justify-between rounded-lg bg-white p-3">
                       <div>
-                        <p className="font-medium">{item.patient || `Patient #${item.patient_id}`}</p>
-                        <p className="text-xs text-gray-600">{new Date(item.date_heure).toLocaleString()} — {item.praticien || 'Médecin'}</p>
+                        <p className="font-medium">{item.patient || t('dashboardIA.patientFallback', { id: item.patient_id })}</p>
+                        <p className="text-xs text-gray-600">{new Date(item.date_heure).toLocaleString(i18n.language)} — {item.praticien || t('dashboardIA.practitionerFallback')}</p>
                       </div>
                       <span className={`rounded px-2 py-1 text-xs font-semibold ${item.risk_level === 'high' ? 'bg-red-100 text-red-700' : item.risk_level === 'medium' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
                         {(item.risk_score * 100).toFixed(1)} %
@@ -298,7 +300,7 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BarChart3 className="w-5 h-5" />
-                Performance des médecins
+                {t('dashboardIA.practitionerPerformance')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -311,15 +313,15 @@ export default function DashboardIA() {
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <div>
-                        <p className="text-gray-600">RDV</p>
+                        <p className="text-gray-600">{t('dashboardIA.rdv')}</p>
                         <p className="font-bold">{practitioner.rdvs_completed}/{practitioner.rdvs_total}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600">Revenus</p>
+                        <p className="text-gray-600">{t('dashboardIA.revenue')}</p>
                         <p className="font-bold">{practitioner.revenue.toFixed(2)} {currency.currency_symbol}</p>
                       </div>
                       <div>
-                        <p className="text-gray-600">Satisfaction</p>
+                        <p className="text-gray-600">{t('dashboardIA.satisfaction')}</p>
                         <p className="font-bold">{practitioner.avg_satisfaction}/5</p>
                       </div>
                     </div>
@@ -336,7 +338,7 @@ export default function DashboardIA() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5" />
-                Patients VIP et GOLD
+                {t('dashboardIA.vipGold')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -345,7 +347,7 @@ export default function DashboardIA() {
                   <div key={patient.id} className="flex items-center justify-between p-2 bg-gradient-to-r from-purple-50 to-pink-50 rounded">
                     <div>
                       <p className="font-medium text-sm">{patient.nom}</p>
-                      <p className="text-xs text-gray-600">{patient.points} points</p>
+                      <p className="text-xs text-gray-600">{t('dashboardIA.points', { count: patient.points })}</p>
                     </div>
                     <div className="text-right">
                       <span className={`text-xs px-2 py-1 rounded font-medium ${

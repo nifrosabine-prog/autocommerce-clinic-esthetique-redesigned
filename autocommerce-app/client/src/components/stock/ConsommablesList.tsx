@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,9 @@ export interface Consommable {
   is_active: boolean;
 }
 
-export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: () => void; canManageStock: boolean }) {
+export function ConsommablesList({
+  onAddClick, canManageStock }: { onAddClick: () => void; canManageStock: boolean }) {
+  const { t, i18n } = useTranslation();
   const [consommables, setConsommables] = useState<Consommable[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mouvementOpen, setMouvementOpen] = useState(false);
@@ -59,7 +62,7 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
       setConsommables(listRes.data);
       setAlertes(Array.isArray(alertesRes.data) ? alertesRes.data : []);
     } catch (err) {
-      toast.error(extractErrorMessage(err, 'Erreur lors du chargement des consommables'));
+      toast.error(extractErrorMessage(err, t('componentUi.consumablesLoadError')));
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +83,7 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
       setSelectedConsommable(c);
       setHistoryOpen(true);
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Impossible de charger l'historique"));
+      toast.error(extractErrorMessage(err, t('componentUi.historyLoadError')));
     }
   };
 
@@ -88,9 +91,9 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
     try {
       const filename = `registre_mouvements_consommables_${new Date().toISOString().slice(0, 10)}.pdf`;
       await downloadPdf('/consommables/mouvements/export-pdf', filename);
-      toast.success('Export PDF du registre consommables généré');
+      toast.success(t('componentUi.pdfExportSuccess'));
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de l'export PDF du registre"));
+      toast.error(extractErrorMessage(err, t('componentUi.pdfExportError')));
     }
   };
 
@@ -98,7 +101,7 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
     e.preventDefault();
     if (!selectedConsommable || !mvtQuantite) return;
     if (mvtType === 'ajustement' && !mvtMotif.trim()) {
-      toast.error("Un motif est obligatoire pour un ajustement d'inventaire");
+      toast.error(t('componentUi.adjustmentReasonRequired'));
       return;
     }
 
@@ -109,11 +112,11 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
         quantite: Number(mvtQuantite),
         motif: mvtMotif
       });
-      toast.success('Mouvement enregistré');
+      toast.success(t('componentUi.movementSaved'));
       setMouvementOpen(false);
       loadConsommables();
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de l'enregistrement du mouvement"));
+      toast.error(extractErrorMessage(err, t('componentUi.movementSaveError')));
     } finally {
       setIsSaving(false);
     }
@@ -129,28 +132,31 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
 
   return (
     <div className="space-y-4">
-      {canManageStock && <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={exportMouvementsPdf} title="Exporter le registre des mouvements en PDF (audit imprimable)">
-          <FileDown className="w-4 h-4 mr-2" />
-          Exporter PDF
-        </Button>
-        <Button onClick={onAddClick}>
-          <Plus className="w-4 h-4 mr-2" />
-          Nouveau consommable
-        </Button>
-      </div>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">{t('componentUi.consumablesTitle')}</h2>
+        {canManageStock && <div className="flex gap-2">
+          <Button variant="outline" onClick={exportMouvementsPdf} title={t('componentUi.exportMovementPdf')}>
+            <FileDown className="w-4 h-4 mr-2" />
+            {t('componentUi.exportPdf')}
+          </Button>
+          <Button onClick={onAddClick}>
+            <Plus className="w-4 h-4 mr-2" />
+            {t('componentUi.newConsumable')}
+          </Button>
+        </div>}
+      </div>
 
       {alertes.length > 0 && (
         <div className="flex items-start gap-2 rounded-md border border-orange-300 bg-orange-50 p-3 text-sm text-orange-800">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           <div>
-            <span className="font-semibold">Alertes consommables ({alertes.length})</span>
+            <span className="font-semibold">{t('componentUi.alerts', { count: alertes.length })}</span>
             <ul className="mt-1 space-y-0.5">
               {alertes.slice(0, 5).map((a) => (
                 <li key={a.id}>
-                  {a.nom} : {a.stock_actuel} {a.unite} restant(s) —{' '}
+                  {t('componentUi.remainingStock', { name: a.nom, stock: a.stock_actuel, unit: a.unite })} —{' '}
                   <span className={a.niveau === 'critique' ? 'font-bold' : ''}>
-                    {a.niveau === 'critique' ? 'CRITIQUE' : 'ALERTE'}
+                    {a.niveau === 'critique' ? t('componentUi.critical') : t('componentUi.warning')}
                   </span>
                 </li>
               ))}
@@ -164,12 +170,12 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>Catégorie</TableHead>
-                <TableHead>Stock Actuel</TableHead>
-                <TableHead>Unité</TableHead>
-                <TableHead>Seuil Alerte</TableHead>
-                    {canManageStock && <TableHead className="text-right">Actions</TableHead>}
+                <TableHead>{t('componentUi.stockName')}</TableHead>
+                <TableHead>{t('componentUi.category')}</TableHead>
+                <TableHead>{t('componentUi.currentStock')}</TableHead>
+                <TableHead>{t('componentUi.unit')}</TableHead>
+                <TableHead>{t('componentUi.alertThresholdShort')}</TableHead>
+                {canManageStock && <TableHead className="text-right">{t('componentUi.actions')}</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -190,16 +196,16 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
                   <TableCell>{c.unite}</TableCell>
                   <TableCell>{c.seuil_alerte}</TableCell>
                   {canManageStock && <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'entree')} title="Entrée de stock">
+                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'entree')} title={t('componentUi.stockIn')}>
                       <Plus className="w-4 h-4" />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'sortie')} title="Sortie de stock">
+                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'sortie')} title={t('componentUi.stockOut')}>
                       <Minus className="w-4 h-4" />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'ajustement')} title="Ajustement d'inventaire">
+                    <Button size="sm" variant="outline" onClick={() => handleMouvement(c, 'ajustement')} title={t('componentUi.inventoryAdjustment')}>
                       <SlidersHorizontal className="w-4 h-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => openHistory(c)} title="Historique des mouvements">
+                    <Button size="sm" variant="ghost" onClick={() => openHistory(c)} title={t('componentUi.movementHistory')}>
                       <History className="w-4 h-4" />
                     </Button>
                   </TableCell>}
@@ -208,7 +214,7 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
               {consommables.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={canManageStock ? 6 : 5} className="text-center py-8 text-muted-foreground">
-                    Aucun consommable enregistré
+                    {t('componentUi.noConsumable')}
                   </TableCell>
                 </TableRow>
               )}
@@ -221,16 +227,16 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {mvtType === 'entree' ? 'Entrée de stock' : mvtType === 'sortie' ? 'Sortie de stock' : "Ajustement d'inventaire"} : {selectedConsommable?.nom}
+              {mvtType === 'entree' ? t('componentUi.stockIn') : mvtType === 'sortie' ? t('componentUi.stockOut') : t('componentUi.inventoryAdjustment')} : {selectedConsommable?.nom}
             </DialogTitle>
             <DialogDescription>
-              Enregistrez un mouvement de stock pour ce consommable.
+              {t('componentUi.movementDescription')}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={submitMouvement} className="space-y-4">
             <div>
               <Label htmlFor="qte">
-                {mvtType === 'ajustement' ? `Stock constaté (${selectedConsommable?.unite}) *` : `Quantité (${selectedConsommable?.unite}) *`}
+                {mvtType === 'ajustement' ? t('componentUi.observedStock', { unit: selectedConsommable?.unite }) : t('componentUi.quantityUnit', { unit: selectedConsommable?.unite })}
               </Label>
               <Input 
                 id="qte" 
@@ -241,23 +247,23 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
                 required 
               />
               {mvtType === 'ajustement' && (
-                <p className="text-xs text-muted-foreground mt-1">Le stock sera remplacé par la quantité constatée.</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('componentUi.stockReplaced')}</p>
               )}
             </div>
             <div>
-              <Label htmlFor="motif">Motif / Commentaire {mvtType === 'ajustement' ? '*' : ''}</Label>
+              <Label htmlFor="motif">{t('componentUi.reasonComment')} {mvtType === 'ajustement' ? '*' : ''}</Label>
               <Input 
                 id="motif" 
                 value={mvtMotif} 
                 onChange={(e) => setMvtMotif(e.target.value)} 
-                placeholder={mvtType === 'ajustement' ? 'Ex: Inventaire mensuel (obligatoire)' : 'Ex: Réception commande, Utilisation soin...'}
+                placeholder={mvtType === 'ajustement' ? t('componentUi.monthlyInventoryPlaceholder') : t('componentUi.movementPlaceholder')}
                 required={mvtType === 'ajustement'}
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setMouvementOpen(false)}>Annuler</Button>
+              <Button type="button" variant="outline" onClick={() => setMouvementOpen(false)}>{t('componentUi.cancel')}</Button>
               <Button type="submit" disabled={isSaving}>
-                {isSaving ? <Spinner className="h-4 w-4" /> : 'Enregistrer'}
+                {isSaving ? <Spinner className="h-4 w-4" /> : t('componentUi.record')}
               </Button>
             </DialogFooter>
           </form>
@@ -267,46 +273,46 @@ export function ConsommablesList({ onAddClick, canManageStock }: { onAddClick: (
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Historique des mouvements : {selectedConsommable?.nom}</DialogTitle>
+            <DialogTitle>{t('componentUi.movementHistoryTitle', { name: selectedConsommable?.nom })}</DialogTitle>
           </DialogHeader>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Quantité</TableHead>
-                  <TableHead>Utilisateur</TableHead>
-                  <TableHead>Motif</TableHead>
+                  <TableHead>{t('componentUi.date')}</TableHead>
+                  <TableHead>{t('componentUi.type')}</TableHead>
+                  <TableHead>{t('componentUi.quantity')}</TableHead>
+                  <TableHead>{t('componentUi.user')}</TableHead>
+                  <TableHead>{t('componentUi.reason')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {historyRows.map((h) => (
                   <TableRow key={h.mouvement_id}>
-                    <TableCell className="whitespace-nowrap">{new Date(h.date_mouvement).toLocaleString('fr-FR')}</TableCell>
+                    <TableCell className="whitespace-nowrap">{new Date(h.date_mouvement).toLocaleString(i18n.resolvedLanguage || i18n.language)}</TableCell>
                     <TableCell>
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                         h.type === 'entree' ? 'bg-green-100 text-green-800' :
                         h.type === 'sortie' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'
                       }`}>
-                        {h.type === 'entree' ? 'Entrée' : h.type === 'sortie' ? 'Sortie' : 'Ajustement'}
+                        {h.type === 'entree' ? t('componentUi.entry') : h.type === 'sortie' ? t('componentUi.exit') : t('componentUi.adjustment')}
                       </span>
                     </TableCell>
                     <TableCell className={h.type === 'entree' ? 'text-green-600 font-semibold' : h.type === 'sortie' ? 'text-red-600 font-semibold' : 'font-semibold'}>
                       {h.type === 'entree' ? '+' : h.type === 'sortie' ? '-' : '='}{h.quantite}
                     </TableCell>
-                    <TableCell>{h.utilisateur || '—'}</TableCell>
-                    <TableCell>{h.motif || '—'}</TableCell>
+                    <TableCell>{h.utilisateur || t('componentUi.notProvided')}</TableCell>
+                    <TableCell>{h.motif || t('componentUi.notProvided')}</TableCell>
                   </TableRow>
                 ))}
                 {historyRows.length === 0 && (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Aucun mouvement</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{t('componentUi.noMovement')}</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setHistoryOpen(false)}>Fermer</Button>
+            <Button type="button" variant="outline" onClick={() => setHistoryOpen(false)}>{t('componentUi.close')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

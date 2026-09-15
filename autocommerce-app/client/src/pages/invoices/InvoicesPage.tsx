@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PatientAutocomplete, type PatientOption } from '@/components/patients/PatientAutocomplete';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { api } from '@/lib/api';
+import { api, downloadPdf } from '@/lib/api';
 import { Spinner } from '@/components/ui/spinner';
 import { AlertCircle, Plus, Trash2, Scan, Zap, CheckCircle, Download, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,6 +21,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from 'react-i18next';
 
 interface Invoice {
   id: number;
@@ -51,22 +52,23 @@ interface Expense {
   facture_scan_statut: string;
 }
 
-const INVOICE_STATUT: Record<string, { label: string; color: string }> = {
-  brouillon: { label: 'Brouillon', color: 'bg-gray-100 text-gray-800' },
-  envoyee: { label: 'Envoyée', color: 'bg-yellow-100 text-yellow-800' },
-  partiellement_payee: { label: 'Partiellement payée', color: 'bg-orange-100 text-orange-800' },
-  payee: { label: 'Payée', color: 'bg-green-100 text-green-800' },
-  annulee: { label: 'Annulée', color: 'bg-red-100 text-red-800' },
+const INVOICE_STATUS_COLORS: Record<string, string> = {
+  brouillon: 'bg-gray-100 text-gray-800',
+  envoyee: 'bg-yellow-100 text-yellow-800',
+  partiellement_payee: 'bg-orange-100 text-orange-800',
+  payee: 'bg-green-100 text-green-800',
+  annulee: 'bg-red-100 text-red-800',
 };
 
-const EXPENSE_STATUT: Record<string, { label: string; color: string }> = {
-  en_attente: { label: 'En attente', color: 'bg-yellow-100 text-yellow-800' },
-  traitee_ia: { label: 'Traitée (IA)', color: 'bg-blue-100 text-blue-800' },
-  validee: { label: 'Validée', color: 'bg-green-100 text-green-800' },
-  rejetee: { label: 'Rejetée', color: 'bg-red-100 text-red-800' },
+const EXPENSE_STATUS_COLORS: Record<string, string> = {
+  en_attente: 'bg-yellow-100 text-yellow-800',
+  traitee_ia: 'bg-blue-100 text-blue-800',
+  validee: 'bg-green-100 text-green-800',
+  rejetee: 'bg-red-100 text-red-800',
 };
 
 export default function InvoicesPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currency = useCurrency();
   const canManageInvoices = ['directrice', 'assistante', 'admin'].includes(user?.role || '');
@@ -104,11 +106,11 @@ export default function InvoicesPage() {
       setPendingActs(pendingRes.status === 'fulfilled' && Array.isArray(pendingRes.value.data) ? pendingRes.value.data : []);
       setAuditLogs(auditRes.status === 'fulfilled' && Array.isArray(auditRes.value.data) ? auditRes.value.data : []);
       const allFailed = [invoicesRes, expensesRes, pendingRes, auditRes].every((r) => r.status === 'rejected');
-      setLoadError(allFailed ? "Erreur lors du chargement — vérifiez la connexion" : null);
+      setLoadError(allFailed ? t('invoices.loadError') : null);
     } catch (err: any) {
       console.error('Failed to load data:', err);
-      setLoadError('Erreur lors du chargement');
-      toast.error('Erreur lors du chargement');
+      setLoadError(t('invoices.loadErrorShort'));
+      toast.error(t('invoices.loadErrorShort'));
     } finally {
       setIsLoading(false);
     }
@@ -117,10 +119,10 @@ export default function InvoicesPage() {
   const handleValiderDepense = async (expense: Expense) => {
     try {
       await api.patch(`/depenses/${expense.id}/valider`, {});
-      toast.success('Dépense validée');
+      toast.success(t('invoices.expenseValidatedSuccess'));
       loadData();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la validation');
+      toast.error(err.response?.data?.detail || t('invoices.expenseValidateError'));
     }
   };
 
@@ -133,12 +135,12 @@ export default function InvoicesPage() {
               <div className="flex items-center gap-3 text-red-800">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <div>
-                  <p className="font-medium">Impossible de charger les données</p>
+                  <p className="font-medium">{t('invoices.loadErrorTitle')}</p>
                   <p className="text-sm text-red-700">{loadError}</p>
                 </div>
               </div>
               <Button variant="outline" onClick={() => void loadData()}>
-                <RefreshCw className="w-4 h-4 mr-2" /> Réessayer
+                <RefreshCw className="w-4 h-4 mr-2" /> {t('invoices.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -162,18 +164,18 @@ export default function InvoicesPage() {
           <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-cyan-400/20 blur-3xl" />
           <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-200">Pilotage financier</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Factures & Dépenses</h1>
-              <p className="mt-2 text-sm text-blue-100/75">Une lecture simple des encaissements, des actes à facturer et des dépenses de la clinique.</p>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-200">{t('invoices.heroKicker')}</p>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{t('invoices.heroTitle')}</h1>
+              <p className="mt-2 text-sm text-blue-100/75">{t('invoices.heroSubtitle')}</p>
             </div>
           {activeTab === 'invoices' && canManageInvoices && (
             <Button onClick={() => setCreateInvoiceOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" /> Nouvelle facture
+              <Plus className="w-4 h-4 mr-2" /> {t('invoices.newInvoice')}
             </Button>
           )}
           {activeTab === 'expenses' && canManageExpenses && (
             <Button onClick={() => setScanOpen(true)}>
-              <Scan className="w-4 h-4 mr-2" /> Scanner une facture
+              <Scan className="w-4 h-4 mr-2" /> {t('invoices.scanInvoice')}
             </Button>
           )}
           </div>
@@ -181,46 +183,46 @@ export default function InvoicesPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="rounded-xl bg-slate-100/80 p-1">
-            <TabsTrigger value="invoices">Factures clients</TabsTrigger>
-            <TabsTrigger value="pending">Actes à facturer <Badge className="ml-2 bg-purple-500">{pendingActs.length}</Badge></TabsTrigger>
-            <TabsTrigger value="expenses">Dépenses & Achats</TabsTrigger>
-            <TabsTrigger value="audit">Audit Financier</TabsTrigger>
+            <TabsTrigger value="invoices">{t('invoices.tabInvoices')}</TabsTrigger>
+            <TabsTrigger value="pending">{t('invoices.tabPending')} <Badge className="ml-2 bg-purple-500">{pendingActs.length}</Badge></TabsTrigger>
+            <TabsTrigger value="expenses">{t('invoices.tabExpenses')}</TabsTrigger>
+            <TabsTrigger value="audit">{t('invoices.tabAudit')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="invoices" className="space-y-4">
             <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm">
               <CardContent className="pt-6">
                 {invoices.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucune facture</p>
+                  <p className="text-center text-muted-foreground py-8">{t('invoices.noInvoices')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Numéro</TableHead>
-                          <TableHead>Base HT</TableHead>
-                          <TableHead>TVA</TableHead>
-                          <TableHead>Total TTC</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Date d'émission</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('invoices.colNumber')}</TableHead>
+                          <TableHead>{t('invoices.colBaseHT')}</TableHead>
+                          <TableHead>{t('invoices.colVat')}</TableHead>
+                          <TableHead>{t('invoices.colTotalTTC')}</TableHead>
+                          <TableHead>{t('invoices.colStatus')}</TableHead>
+                          <TableHead>{t('invoices.colIssueDate')}</TableHead>
+                          <TableHead>{t('invoices.colActions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {invoices.map((invoice) => {
                           const invoiceCurrency = getInvoiceCurrency(invoice, currency);
-                          const s = INVOICE_STATUT[invoice.statut] || { label: invoice.statut, color: 'bg-gray-100 text-gray-800' };
+                          const statusColor = INVOICE_STATUS_COLORS[invoice.statut] || 'bg-gray-100 text-gray-800';
                           const canPay = canManageInvoices && ['envoyee', 'partiellement_payee', 'brouillon'].includes(invoice.statut);
                           const canCancel = canCancelInvoices && !['payee', 'annulee'].includes(invoice.statut);
                           return (
                             <TableRow key={invoice.id}>
                               <TableCell className="font-medium">
                                 <div>{invoice.numero_facture}</div>
-                                {invoice.dossier_id && <Badge variant="outline" className="mt-1 text-[10px]">Dossier #{invoice.dossier_id}</Badge>}
+                                {invoice.dossier_id && <Badge variant="outline" className="mt-1 text-[10px]">{t('invoices.caseBadge', { id: invoice.dossier_id })}</Badge>}
                               </TableCell>
                               <TableCell>
                                 <div>{formatMoney(invoice.sous_total ?? invoice.total_ttc, invoiceCurrency)}</div>
-                                {invoice.remise_globale_pct ? <span className="text-xs text-muted-foreground">Remise {invoice.remise_globale_pct}%</span> : null}
+                                {invoice.remise_globale_pct ? <span className="text-xs text-muted-foreground">{t('invoices.discountPct', { pct: invoice.remise_globale_pct })}</span> : null}
                               </TableCell>
                               <TableCell>
                                 <div>{formatMoney(invoice.montant_tva ?? 0, invoiceCurrency)}</div>
@@ -228,17 +230,17 @@ export default function InvoicesPage() {
                               </TableCell>
                               <TableCell className="font-semibold">{formatMoney(invoice.total_ttc, invoiceCurrency)}</TableCell>
                               <TableCell>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusColor}`}>{t(`invoices.status_${invoice.statut}`, { defaultValue: invoice.statut })}</span>
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">
-                                {new Date(invoice.date_emission).toLocaleDateString('fr-FR')}
+                                {new Date(invoice.date_emission).toLocaleDateString(i18n.language)}
                               </TableCell>
                               <TableCell className="space-x-2">
                                 {canPay && (
-                                  <Button variant="outline" size="sm" onClick={() => setPayTarget(invoice)}>Payer</Button>
+                                  <Button variant="outline" size="sm" onClick={() => setPayTarget(invoice)}>{t('invoices.payAction')}</Button>
                                 )}
                                 {canCancel && (
-                                  <Button variant="ghost" size="sm" onClick={() => setCancelTarget(invoice)}>Annuler</Button>
+                                  <Button variant="ghost" size="sm" onClick={() => setCancelTarget(invoice)}>{t('invoices.cancelAction')}</Button>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -258,16 +260,16 @@ export default function InvoicesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Acte médical</TableHead>
-                      <TableHead>Prix base</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      <TableHead>{t('invoices.colDate')}</TableHead>
+                      <TableHead>{t('invoices.colPatient')}</TableHead>
+                      <TableHead>{t('invoices.colMedicalAct')}</TableHead>
+                      <TableHead>{t('invoices.colBasePrice')}</TableHead>
+                      <TableHead className="text-right">{t('invoices.colAction')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pendingActs.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Aucun acte en attente de facturation</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">{t('invoices.noPendingActs')}</TableCell></TableRow>
                     ) : (
                       pendingActs.map((act) => (
                         <TableRow key={act.dossier_id}>
@@ -289,7 +291,7 @@ export default function InvoicesPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <Button size="sm" className="bg-purple-600 hover:bg-purple-700" onClick={() => setBillingTarget(act)}>
-                              <Zap className="w-3 h-3 mr-1" /> Facturer
+                              <Zap className="w-3 h-3 mr-1" /> {t('invoices.billAction')}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -305,23 +307,23 @@ export default function InvoicesPage() {
             <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm">
               <CardContent className="pt-6">
                 {expenses.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucune dépense</p>
+                  <p className="text-center text-muted-foreground py-8">{t('invoices.noExpenses')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Titre</TableHead>
-                          <TableHead>Fournisseur</TableHead>
-                          <TableHead>Montant TTC</TableHead>
-                          <TableHead>Statut</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Actions</TableHead>
+                          <TableHead>{t('invoices.colTitle')}</TableHead>
+                          <TableHead>{t('invoices.colSupplier')}</TableHead>
+                          <TableHead>{t('invoices.colAmountTTC')}</TableHead>
+                          <TableHead>{t('invoices.colStatus')}</TableHead>
+                          <TableHead>{t('invoices.colDate')}</TableHead>
+                          <TableHead>{t('invoices.colActions')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {expenses.map((expense) => {
-                          const s = EXPENSE_STATUT[expense.facture_scan_statut] || { label: expense.facture_scan_statut, color: 'bg-gray-100 text-gray-800' };
+                          const statusColor = EXPENSE_STATUS_COLORS[expense.facture_scan_statut] || 'bg-gray-100 text-gray-800';
                           const canValidate = canManageExpenses && expense.facture_scan_statut !== 'validee';
                           return (
                             <TableRow key={expense.id}>
@@ -329,14 +331,14 @@ export default function InvoicesPage() {
                               <TableCell>{expense.fournisseur || '—'}</TableCell>
                               <TableCell>{formatMoney(expense.montant_ttc, normalizeCurrency(expense))}</TableCell>
                               <TableCell>
-                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${s.color}`}>{s.label}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusColor}`}>{t(`invoices.expenseStatus_${expense.facture_scan_statut}`, { defaultValue: expense.facture_scan_statut })}</span>
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground">
-                                {new Date(expense.date_depense).toLocaleDateString('fr-FR')}
+                                {new Date(expense.date_depense).toLocaleDateString(i18n.language)}
                               </TableCell>
                               <TableCell>
                                 {canValidate && (
-                                  <Button variant="outline" size="sm" onClick={() => handleValiderDepense(expense)}>Valider</Button>
+                                  <Button variant="outline" size="sm" onClick={() => handleValiderDepense(expense)}>{t('invoices.validateAction')}</Button>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -354,23 +356,23 @@ export default function InvoicesPage() {
             <Card className="rounded-2xl border-slate-200/80 bg-white shadow-sm">
               <CardContent className="pt-6">
                 {auditLogs.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Aucun log d'audit financier</p>
+                  <p className="text-center text-muted-foreground py-8">{t('invoices.noAuditLogs')}</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Action</TableHead>
-                          <TableHead>Entité</TableHead>
-                          <TableHead>Utilisateur</TableHead>
-                          <TableHead>Détails</TableHead>
+                          <TableHead>{t('invoices.colDate')}</TableHead>
+                          <TableHead>{t('invoices.colAction')}</TableHead>
+                          <TableHead>{t('invoices.colEntity')}</TableHead>
+                          <TableHead>{t('invoices.colUser')}</TableHead>
+                          <TableHead>{t('invoices.colDetails')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {auditLogs.map((log) => (
                           <TableRow key={log.id}>
-                            <TableCell className="text-xs">{new Date(log.created_at).toLocaleString('fr-FR')}</TableCell>
+                            <TableCell className="text-xs">{new Date(log.created_at).toLocaleString(i18n.language)}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className="capitalize">{log.action}</Badge>
                             </TableCell>
@@ -401,6 +403,7 @@ export default function InvoicesPage() {
 }
 
 function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOpenChange: () => void, onInvoiced: () => void }) {
+  const { t } = useTranslation();
   const currency = useCurrency();
   const [lignes, setLignes] = useState<any[]>([]);
   const [remise, setRemise] = useState(0);
@@ -434,17 +437,21 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
         lignes_ajustees: lignes
       });
       setResult(res.data);
-      toast.success('Facture générée avec succès');
+      toast.success(t('invoices.billing.generateSuccess'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la génération');
+      toast.error(err.response?.data?.detail || t('invoices.billing.generateError'));
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleDownload = () => {
-    if (result?.pdf_url) {
-      window.open(result.pdf_url, '_blank');
+  const handleDownload = async () => {
+    if (!result?.facture_id) return;
+    try {
+      await downloadPdf(`/factures/${result.facture_id}/pdf`, `facture_${result.numero}.pdf`);
+      toast.success(t('invoices.billing.downloadSuccess'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || t('invoices.billing.downloadError'));
     }
   };
 
@@ -454,13 +461,13 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
     <Dialog open={!!target} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Finalisation de la facture IA</DialogTitle>
-          <DialogDescription>Patient : {target.patient_nom} ({target.patient_fidelite.toUpperCase()})</DialogDescription>
+          <DialogTitle>{t('invoices.billing.title')}</DialogTitle>
+          <DialogDescription>{t('invoices.billing.patientLine', { name: target.patient_nom, loyalty: target.patient_fidelite.toUpperCase() })}</DialogDescription>
         </DialogHeader>
         {!result ? (
           <div className="space-y-4 py-4">
             <div className="space-y-3">
-              <Label>Ajustement des prix par acte</Label>
+              <Label>{t('invoices.billing.priceAdjustmentLabel')}</Label>
               {lignes.map((l, i) => (
                 <div key={i} className="flex gap-2 items-center bg-gray-50 p-2 rounded">
                   <span className="flex-1 text-sm font-medium">{l.description}</span>
@@ -478,17 +485,17 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
             
             <div className="space-y-2 pt-2 border-t">
               <div className="flex justify-between text-xs text-purple-600 font-semibold">
-                <span>Remise fidélité automatique</span>
-                <span>Inclus selon statut</span>
+                <span>{t('invoices.billing.autoLoyaltyDiscount')}</span>
+                <span>{t('invoices.billing.includedByStatus')}</span>
               </div>
-              <Label htmlFor="remise">Remise manuelle supplémentaire (%)</Label>
+              <Label htmlFor="remise">{t('invoices.billing.extraManualDiscount')}</Label>
               <Input id="remise" type="number" value={remise} onChange={(e) => setRemise(Number(e.target.value))} />
             </div>
             
             <DialogFooter>
-              <Button variant="outline" onClick={onOpenChange}>Annuler</Button>
+              <Button variant="outline" onClick={onOpenChange}>{t('common.cancel')}</Button>
               <Button onClick={handleGenerate} disabled={isSaving} className="bg-purple-600 hover:bg-purple-700">
-                {isSaving ? <Spinner className="h-4 w-4" /> : 'Générer & Valider'}
+                {isSaving ? <Spinner className="h-4 w-4" /> : t('invoices.billing.generateValidate')}
               </Button>
             </DialogFooter>
           </div>
@@ -498,16 +505,16 @@ function BillingDialog({ target, onOpenChange, onInvoiced }: { target: any, onOp
               <div className="mx-auto w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
                 <CheckCircle className="w-6 h-6" />
               </div>
-              <h3 className="text-lg font-bold">Facture {result.numero}</h3>
+              <h3 className="text-lg font-bold">{t('invoices.billing.invoiceNumber', { number: result.numero })}</h3>
               <p className="text-2xl font-bold text-primary">{formatMoney(result.total, normalizeCurrency(result))}</p>
-              <p className="text-sm text-muted-foreground">Remise totale appliquée : {result.remise_appliquee}%</p>
+              <p className="text-sm text-muted-foreground">{t('invoices.billing.totalDiscountApplied', { pct: result.remise_appliquee })}</p>
             </div>
             <div className="flex flex-col gap-2">
               <Button onClick={handleDownload} className="w-full">
-                <Download className="w-4 h-4 mr-2" /> Télécharger le PDF
+                <Download className="w-4 h-4 mr-2" /> {t('invoices.billing.downloadPdf')}
               </Button>
               <Button variant="outline" onClick={() => { onInvoiced(); onOpenChange(); }} className="w-full">
-                Fermer
+                {t('invoices.close')}
               </Button>
             </div>
           </div>
@@ -524,6 +531,7 @@ interface LigneForm { description: string; prix: string; quantite: string }
 function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
   open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [patientAutocompleteKey, setPatientAutocompleteKey] = useState(0);
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
   const [patientId, setPatientId] = useState('');
@@ -552,10 +560,10 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientId) { toast.error('Sélectionnez un patient'); return; }
-    if (!dossierId || Number(dossierId) <= 0) { toast.error('Indiquez le dossier patient à facturer'); return; }
+    if (!patientId) { toast.error(t('invoices.new.selectPatientError')); return; }
+    if (!dossierId || Number(dossierId) <= 0) { toast.error(t('invoices.new.caseRequiredError')); return; }
     const validLignes = lignes.filter((l) => l.description.trim() && Number(l.prix) > 0);
-    if (validLignes.length === 0) { toast.error('Ajoutez au moins une ligne valide'); return; }
+    if (validLignes.length === 0) { toast.error(t('invoices.new.validLineRequiredError')); return; }
 
     setIsSaving(true);
     try {
@@ -568,11 +576,11 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
           quantite: Number(l.quantite) || 1,
         })),
       });
-      toast.success('Facture créée');
+      toast.success(t('invoices.new.createdSuccess'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la création');
+      toast.error(err.response?.data?.detail || t('invoices.new.createError'));
     } finally {
       setIsSaving(false);
     }
@@ -582,8 +590,8 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nouvelle facture</DialogTitle>
-          <DialogDescription>Ajoutez le patient et les lignes (actes/produits).</DialogDescription>
+          <DialogTitle>{t('invoices.new.title')}</DialogTitle>
+          <DialogDescription>{t('invoices.new.description')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <PatientAutocomplete
@@ -593,30 +601,30 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
           />
 
       <div className="space-y-2">
-        <Label htmlFor="invoice-dossier-id">Dossier patient</Label>
-        <Input id="invoice-dossier-id" type="number" min="1" value={dossierId} onChange={(e) => setDossierId(e.target.value)} placeholder="Identifiant du dossier médical" />
-        <p className="text-xs text-muted-foreground">La facture sera refusée si ce dossier n’appartient pas au patient sélectionné.</p>
+        <Label htmlFor="invoice-dossier-id">{t('invoices.new.caseLabel')}</Label>
+        <Input id="invoice-dossier-id" type="number" min="1" value={dossierId} onChange={(e) => setDossierId(e.target.value)} placeholder={t('invoices.new.casePlaceholder')} />
+        <p className="text-xs text-muted-foreground">{t('invoices.new.caseHint')}</p>
       </div>
       <div className="space-y-2">
-            <Label>Lignes</Label>
+            <Label>{t('invoices.new.linesLabel')}</Label>
             {lignes.map((ligne, i) => (
               <div key={i} className="flex gap-2 items-start">
-                <Input placeholder="Description" value={ligne.description} onChange={(e) => updateLigne(i, 'description', e.target.value)} className="flex-1" />
-                <Input placeholder="Prix" type="number" step="0.001" value={ligne.prix} onChange={(e) => updateLigne(i, 'prix', e.target.value)} className="w-24" />
-                <Input placeholder="Qté" type="number" value={ligne.quantite} onChange={(e) => updateLigne(i, 'quantite', e.target.value)} className="w-16" />
+                <Input placeholder={t('invoices.new.descriptionPlaceholder')} value={ligne.description} onChange={(e) => updateLigne(i, 'description', e.target.value)} className="flex-1" />
+                <Input placeholder={t('invoices.new.pricePlaceholder')} type="number" step="0.001" value={ligne.prix} onChange={(e) => updateLigne(i, 'prix', e.target.value)} className="w-24" />
+                <Input placeholder={t('invoices.new.qtyPlaceholder')} type="number" value={ligne.quantite} onChange={(e) => updateLigne(i, 'quantite', e.target.value)} className="w-16" />
                 <Button type="button" variant="ghost" size="sm" onClick={() => setLignes((prev) => prev.filter((_, idx) => idx !== i))} disabled={lignes.length === 1}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             ))}
             <Button type="button" variant="outline" size="sm" onClick={() => setLignes((prev) => [...prev, { description: '', prix: '', quantite: '1' }])}>
-              <Plus className="w-4 h-4 mr-1" /> Ajouter une ligne
+              <Plus className="w-4 h-4 mr-1" /> {t('invoices.new.addLine')}
             </Button>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Créer'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('invoices.new.create')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -627,6 +635,7 @@ function NewInvoiceDialog({ open, onOpenChange, onCreated }: {
 function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
   invoice: Invoice | null; onOpenChange: () => void; onPaid: () => void;
 }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState('especes');
   const [montant, setMontant] = useState('');
   const [reference, setReference] = useState('');
@@ -648,7 +657,7 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
     if (!invoice) return;
     const amount = Number(montant);
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error('Saisissez un montant de paiement valide');
+      toast.error(t('invoices.pay.invalidAmountError'));
       return;
     }
     setIsSaving(true);
@@ -660,10 +669,10 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
         notes: notes.trim() || undefined,
       });
       setPaymentConfirmed(true);
-      toast.success(`Paiement enregistré — solde : ${response.data.solde}`);
+      toast.success(t('invoices.pay.savedSuccessBalance', { balance: response.data.solde }));
       onPaid();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors du paiement');
+      toast.error(err.response?.data?.detail || t('invoices.pay.payError'));
     } finally {
       setIsSaving(false);
     }
@@ -673,40 +682,40 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
     <Dialog open={!!invoice} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Enregistrer le paiement</DialogTitle>
+          <DialogTitle>{t('invoices.pay.title')}</DialogTitle>
           <DialogDescription>{invoice && `${invoice.numero_facture} — ${formatMoney(invoice.total_ttc, invoiceCurrency)}`}</DialogDescription>
         </DialogHeader>
         <div>
-          <Label htmlFor="montant">Montant à encaisser</Label>
+          <Label htmlFor="montant">{t('invoices.pay.amountLabel')}</Label>
           <Input id="montant" type="number" min="0.001" step="0.001" value={montant} onChange={(e) => setMontant(e.target.value)} />
-          <p className="mt-1 text-xs text-muted-foreground">Le serveur refusera tout montant supérieur au solde réel.</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t('invoices.pay.amountHint')}</p>
         </div>
         <div>
-          <Label htmlFor="mode">Mode de paiement</Label>
+          <Label htmlFor="mode">{t('invoices.pay.modeLabel')}</Label>
           <select id="mode" value={mode} onChange={(e) => setMode(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-            <option value="especes">Espèces</option>
-            <option value="carte">Carte bancaire</option>
-            <option value="cheque">Chèque</option>
-            <option value="virement">Virement</option>
+            <option value="especes">{t('invoices.pay.modeCash')}</option>
+            <option value="carte">{t('invoices.pay.modeCard')}</option>
+            <option value="cheque">{t('invoices.pay.modeCheck')}</option>
+            <option value="virement">{t('invoices.pay.modeTransfer')}</option>
           </select>
         </div>
         <div>
-          <Label htmlFor="reference">Référence (facultatif)</Label>
-          <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="TPE, chèque, virement…" />
+          <Label htmlFor="reference">{t('invoices.pay.referenceLabel')}</Label>
+          <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('invoices.pay.referencePlaceholder')} />
         </div>
         <div>
-          <Label htmlFor="payment-notes">Note (facultatif)</Label>
+          <Label htmlFor="payment-notes">{t('invoices.pay.noteLabel')}</Label>
           <Textarea id="payment-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
         </div>
         {paymentConfirmed ? (
           <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800" role="status">
-            Paiement enregistré. La facture est maintenant marquée comme payée.
+            {t('invoices.pay.confirmedMessage')}
           </div>
         ) : null}
         <DialogFooter>
-          {!paymentConfirmed && <Button variant="outline" onClick={onOpenChange}>Annuler</Button>}
+          {!paymentConfirmed && <Button variant="outline" onClick={onOpenChange}>{t('common.cancel')}</Button>}
           <Button onClick={paymentConfirmed ? onOpenChange : handleConfirm} disabled={isSaving}>
-            {isSaving ? <Spinner className="h-4 w-4" /> : paymentConfirmed ? 'Fermer' : 'Confirmer le paiement'}
+            {isSaving ? <Spinner className="h-4 w-4" /> : paymentConfirmed ? t('invoices.close') : t('invoices.pay.confirmPayment')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -717,21 +726,22 @@ function PayInvoiceDialog({ invoice, onOpenChange, onPaid }: {
 function CancelInvoiceDialog({ invoice, onOpenChange, onCancelled }: {
   invoice: Invoice | null; onOpenChange: () => void; onCancelled: () => void;
 }) {
+  const { t } = useTranslation();
   const [motif, setMotif] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   useEffect(() => setMotif(''), [invoice]);
 
   const handleConfirm = async () => {
     if (!invoice) return;
-    if (motif.trim().length < 3) { toast.error('Merci de préciser un motif'); return; }
+    if (motif.trim().length < 3) { toast.error(t('invoices.cancel.reasonRequiredError')); return; }
     setIsSaving(true);
     try {
       await api.post(`/factures/${invoice.id}/annuler`, { motif: motif.trim() });
-      toast.success('Facture annulée');
+      toast.success(t('invoices.cancel.cancelledSuccess'));
       onOpenChange();
       onCancelled();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'annulation");
+      toast.error(err.response?.data?.detail || t('invoices.cancel.cancelError'));
     } finally {
       setIsSaving(false);
     }
@@ -741,17 +751,17 @@ function CancelInvoiceDialog({ invoice, onOpenChange, onCancelled }: {
     <Dialog open={!!invoice} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Annuler la facture</DialogTitle>
+          <DialogTitle>{t('invoices.cancel.title')}</DialogTitle>
           <DialogDescription>{invoice?.numero_facture}</DialogDescription>
         </DialogHeader>
         <div>
-          <Label htmlFor="motif">Motif *</Label>
+          <Label htmlFor="motif">{t('invoices.cancel.reasonLabel')}</Label>
           <Textarea id="motif" value={motif} onChange={(e) => setMotif(e.target.value)} rows={3} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onOpenChange}>Retour</Button>
+          <Button variant="outline" onClick={onOpenChange}>{t('invoices.cancel.back')}</Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={isSaving}>
-            {isSaving ? <Spinner className="h-4 w-4" /> : "Confirmer l'annulation"}
+            {isSaving ? <Spinner className="h-4 w-4" /> : t('invoices.cancel.confirmCancel')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -762,6 +772,7 @@ function CancelInvoiceDialog({ invoice, onOpenChange, onCancelled }: {
 function ScanExpenseDialog({ open, onOpenChange, onScanned }: {
   open: boolean; onOpenChange: (v: boolean) => void; onScanned: () => void;
 }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [fournisseur, setFournisseur] = useState('');
   const [titre, setTitre] = useState('');
@@ -771,20 +782,20 @@ function ScanExpenseDialog({ open, onOpenChange, onScanned }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) { toast.error('Sélectionnez un fichier'); return; }
+    if (!file) { toast.error(t('invoices.scan.fileRequiredError')); return; }
     setIsUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       await api.post('/depenses/scan', formData, {
         params: { fournisseur: fournisseur || undefined, titre: titre || undefined },
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': undefined },
       });
-      toast.success('Facture envoyée pour extraction automatique');
+      toast.success(t('invoices.scan.sentSuccess'));
       onOpenChange(false);
       onScanned();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'envoi");
+      toast.error(err.response?.data?.detail || t('invoices.scan.sendError'));
     } finally {
       setIsUploading(false);
     }
@@ -794,25 +805,25 @@ function ScanExpenseDialog({ open, onOpenChange, onScanned }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Scanner une facture fournisseur</DialogTitle>
-          <DialogDescription>L'extraction des montants se fait automatiquement (IA) après envoi.</DialogDescription>
+          <DialogTitle>{t('invoices.scan.title')}</DialogTitle>
+          <DialogDescription>{t('invoices.scan.description')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="scan-file">Fichier (PDF ou image)</Label>
+            <Label htmlFor="scan-file">{t('invoices.scan.fileLabel')}</Label>
             <input id="scan-file" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} className="w-full text-sm" />
           </div>
           <div>
-            <Label htmlFor="fournisseur">Fournisseur (optionnel)</Label>
+            <Label htmlFor="fournisseur">{t('invoices.scan.supplierLabel')}</Label>
             <Input id="fournisseur" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} />
           </div>
           <div>
-            <Label htmlFor="titre">Titre (optionnel)</Label>
+            <Label htmlFor="titre">{t('invoices.scan.titleLabel')}</Label>
             <Input id="titre" value={titre} onChange={(e) => setTitre(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isUploading}>{isUploading ? <Spinner className="h-4 w-4" /> : 'Envoyer'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={isUploading}>{isUploading ? <Spinner className="h-4 w-4" /> : t('invoices.scan.send')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

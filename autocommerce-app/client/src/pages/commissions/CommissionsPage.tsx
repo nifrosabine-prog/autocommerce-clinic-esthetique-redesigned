@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ interface Commission {
 }
 
 export default function CommissionsPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
@@ -54,8 +56,8 @@ export default function CommissionsPage() {
       setLoadError(null);
     } catch (err: any) {
       console.error('Failed to load commissions:', err);
-      setLoadError('Erreur lors du chargement des commissions');
-      toast.error('Erreur lors du chargement des commissions');
+      setLoadError(t('commissions.loadError'));
+      toast.error(t('commissions.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -65,10 +67,10 @@ export default function CommissionsPage() {
     try {
       setValidatingId(commission.id);
       await api.patch(`/commissions/${commission.id}/valider`);
-      toast.success('Commission validée');
+      toast.success(t('commissions.validated'));
       loadCommissions();
     } catch (err: any) {
-      const message = err.response?.data?.detail || 'Erreur lors de la validation';
+      const message = err.response?.data?.detail || t('commissions.validateError');
       toast.error(message);
     } finally {
       setValidatingId(null);
@@ -79,10 +81,10 @@ export default function CommissionsPage() {
     try {
       setValidatingId(commission.id);
       await api.post(`/commissions/${commission.id}/payer`, { date_paiement: new Date().toISOString().split('T')[0] });
-      toast.success('Commission marquée comme payée');
+      toast.success(t('commissions.paid'));
       loadCommissions();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors du paiement');
+      toast.error(err.response?.data?.detail || t('commissions.payError'));
     } finally {
       setValidatingId(null);
     }
@@ -130,15 +132,15 @@ export default function CommissionsPage() {
   const getStatusLabel = (statut: string, commission?: Commission) => {
     switch (statut) {
       case 'en_attente':
-        return 'En attente';
+        return t('commissions.statusPending');
       case 'validation_partielle':
-        return 'Validation partielle';
+        return t('commissions.statusPartial');
       case 'validee':
         return (commission?.validateur_2_id || commission?.validee_par_id_2)
-          ? 'Double-validée'
-          : 'Validée';
+          ? t('commissions.statusDoubleValidated')
+          : t('commissions.statusValidated');
       case 'payee':
-        return 'Payée';
+        return t('commissions.statusPaid');
       default:
         return statut;
     }
@@ -155,12 +157,12 @@ export default function CommissionsPage() {
               <div className="flex items-center gap-3 text-red-800">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <div>
-                  <p className="font-medium">Impossible de charger les commissions</p>
+                  <p className="font-medium">{t('commissions.cannotLoad')}</p>
                   <p className="text-sm text-red-700">{loadError}</p>
                 </div>
               </div>
               <Button variant="outline" onClick={() => void loadCommissions()}>
-                <RefreshCw className="w-4 h-4 mr-2" /> Réessayer
+                <RefreshCw className="w-4 h-4 mr-2" /> {t('commissions.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -183,35 +185,35 @@ export default function CommissionsPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Commissions</h1>
-          <p className="text-muted-foreground mt-1">Gestion des commissions commerciales</p>
+          <h1 className="text-3xl font-bold">{t('commissions.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('commissions.subtitle')}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Flux de validation</CardTitle>
+            <CardTitle className="text-sm">{t('commissions.validationFlow')}</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            <p>• Commissions ≤ 500 DT : validation directe en un clic</p>
-            <p>• Commissions &gt; 500 DT : validation en deux étapes par deux personnes différentes</p>
+            <p>{t('commissions.flowDirect')}</p>
+            <p>{t('commissions.flowDouble')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="pt-6">
             {commissions.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">Aucune commission</p>
+              <p className="text-center text-muted-foreground py-8">{t('commissions.none')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Commercial</TableHead>
-                      <TableHead>Montant</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Validateurs</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>{t('commissions.salesperson')}</TableHead>
+                      <TableHead>{t('commissions.amount')}</TableHead>
+                      <TableHead>{t('commissions.status')}</TableHead>
+                      <TableHead>{t('commissions.validators')}</TableHead>
+                      <TableHead>{t('commissions.date')}</TableHead>
+                      <TableHead>{t('commissions.actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -224,7 +226,7 @@ export default function CommissionsPage() {
                           </span>
                           {needsDoubleValidation(commission.montant) && (
                             <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                              Double validation
+                              {t('commissions.doubleValidation')}
                             </span>
                           )}
                         </TableCell>
@@ -240,12 +242,12 @@ export default function CommissionsPage() {
                           <div>{commission.validateur_1_nom || <span className="text-muted-foreground">-</span>}</div>
                           {commission.validateur_2_nom && (
                             <div className="text-xs text-muted-foreground">
-                              2e : {commission.validateur_2_nom}
+                              {t('commissions.secondValidator')} : {commission.validateur_2_nom}
                             </div>
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {new Date(commission.date_creation).toLocaleDateString('fr-FR')}
+                          {new Date(commission.date_creation).toLocaleDateString(i18n.language)}
                         </TableCell>
                         <TableCell>
                           {canValidate(commission) ? (
@@ -255,7 +257,7 @@ export default function CommissionsPage() {
                               onClick={() => handleValidate(commission)}
                               disabled={validatingId === commission.id}
                             >
-                              {validatingId === commission.id ? 'Validation...' : 'Valider'}
+                              {validatingId === commission.id ? t('commissions.validating') : t('commissions.validate')}
                             </Button>
                           ) : commission.statut === 'validee' && canPay ? (
                             <Button
@@ -264,11 +266,11 @@ export default function CommissionsPage() {
                               onClick={() => handlePay(commission)}
                               disabled={validatingId === commission.id}
                             >
-                              {validatingId === commission.id ? 'Paiement...' : 'Payer'}
+                              {validatingId === commission.id ? t('commissions.paying') : t('commissions.pay')}
                             </Button>
                           ) : (
                             <Button variant="ghost" size="sm" disabled>
-                              {commission.statut === 'payee' ? 'Payée' : 'Validée'}
+                              {commission.statut === 'payee' ? t('commissions.statusPaid') : t('commissions.statusValidated')}
                             </Button>
                           )}
                         </TableCell>

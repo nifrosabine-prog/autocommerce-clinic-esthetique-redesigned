@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,6 +72,7 @@ function getApiErrorMessage(detail: unknown, fallback: string): string {
 }
 
 export default function TeamPage() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [actes, setActes] = useState<Acte[]>([]);
@@ -114,7 +116,7 @@ export default function TeamPage() {
       setUsers(usersRes.data);
       setActes(actesRes.data);
     } catch (err) {
-      toast.error('Erreur lors du chargement des données');
+      toast.error(t('team.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -183,19 +185,19 @@ export default function TeamPage() {
           ...(password ? { password } : {}),
         };
         await api.patch(`/users/${editingUser.id}`, payload);
-        toast.success('Compte mis à jour');
+        toast.success(t('team.updated'));
       } else {
         if (!formData.password) {
-          toast.error('Le mot de passe est obligatoire pour un nouveau compte');
+          toast.error(t('team.passwordRequired'));
           return;
         }
         await api.post('/users', profilePayload);
-        toast.success('Compte créé');
+        toast.success(t('team.created'));
       }
       setIsDialogOpen(false);
       loadData();
     } catch (err: any) {
-      toast.error(getApiErrorMessage(err?.response?.data?.detail, 'Erreur lors de la sauvegarde'));
+      toast.error(getApiErrorMessage(err?.response?.data?.detail, t('team.saveError')));
     }
   };
 
@@ -210,18 +212,18 @@ export default function TeamPage() {
 
   const handleToggleActive = async (user: User) => {
     if (togglingUserIdsRef.current.has(user.id)) return;
-    const action = user.is_active ? 'désactiver' : 'réactiver';
-    if (!window.confirm(`Voulez-vous vraiment ${action} ${user.prenom} ${user.nom} ?`)) return;
+    const action = user.is_active ? t('team.deactivate') : t('team.reactivate');
+    if (!window.confirm(t('team.confirmToggle', { action, name: `${user.prenom} ${user.nom}` }))) return;
     togglingUserIdsRef.current.add(user.id);
     setIsToggling((current) => new Set(current).add(user.id));
     try {
       await api.patch(`/users/${user.id}`, { is_active: !user.is_active });
-      toast.success(user.is_active ? 'Personnel désactivé' : 'Personnel réactivé');
+      toast.success(user.is_active ? t('team.deactivated') : t('team.reactivated'));
       await loadData();
     } catch (err: any) {
       const message = err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT'
-        ? 'Le serveur met trop de temps à répondre. Réessayez dans quelques instants.'
-        : getApiErrorMessage(err?.response?.data?.detail, `Impossible de ${action} ce personnel`);
+        ? t('team.timeout')
+        : getApiErrorMessage(err?.response?.data?.detail, t('team.toggleError', { action }));
       toast.error(message);
     } finally {
       togglingUserIdsRef.current.delete(user.id);
@@ -242,11 +244,11 @@ export default function TeamPage() {
     setIsDeleting(true);
     try {
       await api.delete(`/users/${deletingUser.id}`);
-      toast.success('Personnel archivé et anonymisé');
+      toast.success(t('team.archived'));
       setDeletingUser(null);
       await loadData();
     } catch (err: any) {
-      toast.error(getApiErrorMessage(err?.response?.data?.detail, 'Impossible de supprimer ce personnel'));
+      toast.error(getApiErrorMessage(err?.response?.data?.detail, t('team.deleteError')));
     } finally {
       setIsDeleting(false);
     }
@@ -256,9 +258,9 @@ export default function TeamPage() {
     try {
       setIsExporting(true);
       await downloadCsv('/users/export.csv', 'equipe.csv');
-      toast.success('Export CSV téléchargé');
+      toast.success(t('team.exportSuccess'));
     } catch (err: any) {
-      toast.error(getApiErrorMessage(err?.response?.data?.detail, 'Erreur lors du téléchargement CSV'));
+      toast.error(getApiErrorMessage(err?.response?.data?.detail, t('team.exportError')));
     } finally {
       setIsExporting(false);
     }
@@ -269,16 +271,16 @@ export default function TeamPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Gestion de l'Équipe</h1>
-            <p className="text-muted-foreground mt-1">Gérez les comptes de l’équipe et leurs habilitations</p>
+            <h1 className="text-3xl font-bold">{t('team.title')}</h1>
+            <p className="text-muted-foreground mt-1">{t('team.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleExportCsv} disabled={isExporting}>
               <Download className="w-4 h-4 mr-2" />
-              {isExporting ? 'Export en cours...' : 'Exporter CSV'}
+              {isExporting ? t('team.exporting') : t('team.exportCsv')}
             </Button>
             <Button onClick={() => handleOpenDialog()}>
-              <UserPlus className="w-4 h-4 mr-2" /> Nouveau membre
+              <UserPlus className="w-4 h-4 mr-2" /> {t('team.newMember')}
             </Button>
           </div>
         </div>
@@ -291,13 +293,13 @@ export default function TeamPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Rôle</TableHead>
-                    <TableHead>Spécialité</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Actes</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('team.nom')}</TableHead>
+                    <TableHead>{t('team.role')}</TableHead>
+                    <TableHead>{t('team.specialite')}</TableHead>
+                    <TableHead>{t('team.email')}</TableHead>
+                    <TableHead>{t('team.actes')}</TableHead>
+                    <TableHead>{t('team.status')}</TableHead>
+                    <TableHead className="text-right">{t('team.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -309,48 +311,48 @@ export default function TeamPage() {
                           <span className="font-medium">{u.prenom} {u.nom}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="capitalize">{u.role}</TableCell>
+                      <TableCell className="capitalize">{t(`team.role_${u.role}`, { defaultValue: u.role })}</TableCell>
                       <TableCell>{u.specialite || '-'}</TableCell>
                       <TableCell>{u.email}</TableCell>
-                      <TableCell>{u.acte_ids?.length || 0} acte(s)</TableCell>
+                      <TableCell>{t('team.actesCount', { count: u.acte_ids?.length || 0 })}</TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded-full text-xs ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                              {u.is_active ? 'Actif' : 'Inactif'}
+                              {u.is_active ? t('team.active') : t('team.inactive')}
                             </span>
-                            {u.is_public && <span className="ml-2 px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">En ligne</span>}
+                            {u.is_public && <span className="ml-2 px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">{t('team.online')}</span>}
                           </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenDialog(u)}
-                          aria-label={`Modifier ${u.prenom} ${u.nom}`}
-                          title={`Modifier ${u.prenom} ${u.nom}`}
+                          aria-label={t('team.editAria', { name: `${u.prenom} ${u.nom}` })}
+                          title={t('team.editAria', { name: `${u.prenom} ${u.nom}` })}
                         >
                           <Edit2 className="w-4 h-4" aria-hidden="true" />
-                          <span className="sr-only">Modifier {u.prenom} {u.nom}</span>
+                          <span className="sr-only">{t('team.editAria', { name: `${u.prenom} ${u.nom}` })}</span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleToggleActive(u)}
                           disabled={isToggling.has(u.id)}
-                          aria-label={`${u.is_active ? 'Désactiver' : 'Réactiver'} ${u.prenom} ${u.nom}`}
-                          title={`${u.is_active ? 'Désactiver' : 'Réactiver'} ${u.prenom} ${u.nom}`}
+                          aria-label={t('team.toggleAria', { action: u.is_active ? t('team.deactivate') : t('team.reactivate'), name: `${u.prenom} ${u.nom}` })}
+                          title={t('team.toggleAria', { action: u.is_active ? t('team.deactivate') : t('team.reactivate'), name: `${u.prenom} ${u.nom}` })}
                         >
                           <Power className={`w-4 h-4 ${u.is_active ? 'text-amber-600' : 'text-emerald-600'}`} aria-hidden="true" />
-                          <span className="sr-only">{u.is_active ? 'Désactiver' : 'Réactiver'} {u.prenom} {u.nom}</span>
+                          <span className="sr-only">{t('team.toggleAria', { action: u.is_active ? t('team.deactivate') : t('team.reactivate'), name: `${u.prenom} ${u.nom}` })}</span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(u)}
-                          aria-label={`Supprimer ${u.prenom} ${u.nom}`}
-                          title={`Supprimer ${u.prenom} ${u.nom}`}
+                          aria-label={t('team.deleteAria', { name: `${u.prenom} ${u.nom}` })}
+                          title={t('team.deleteAria', { name: `${u.prenom} ${u.nom}` })}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="w-4 h-4" aria-hidden="true" />
-                          <span className="sr-only">Supprimer {u.prenom} {u.nom}</span>
+                          <span className="sr-only">{t('team.deleteAria', { name: `${u.prenom} ${u.nom}` })}</span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -365,54 +367,54 @@ export default function TeamPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingUser ? 'Modifier le membre' : 'Nouveau membre'}</DialogTitle>
-            <DialogDescription>Configurez les accès et les pratiques du médecin.</DialogDescription>
+            <DialogTitle>{editingUser ? t('team.editTitle') : t('team.newTitle')}</DialogTitle>
+            <DialogDescription>{t('team.dialogDesc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="prenom">Prénom *</Label>
+                <Label htmlFor="prenom">{t('team.prenom')}</Label>
                 <Input id="prenom" value={formData.prenom} onChange={(e) => setFormData({...formData, prenom: e.target.value})} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="nom">Nom *</Label>
+                <Label htmlFor="nom">{t('team.nomRequired')}</Label>
                 <Input id="nom" value={formData.nom} onChange={(e) => setFormData({...formData, nom: e.target.value})} />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email">{t('team.emailRequired')}</Label>
                 <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="password">{editingUser ? 'Mot de passe (laisser vide pour inchangé)' : 'Mot de passe *'}</Label>
+                <Label htmlFor="password">{editingUser ? t('team.passwordEdit') : t('team.passwordRequiredLabel')}</Label>
                 <Input id="password" type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="role">Rôle *</Label>
+                <Label htmlFor="role">{t('team.roleRequired')}</Label>
                 <select 
                   id="role" 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={formData.role} 
                   onChange={(e) => setFormData({...formData, role: e.target.value})}
                 >
-                  <option value="medecin">Médecin</option>
-                  <option value="estheticienne">Esthéticienne</option>
-                  <option value="assistante">Assistante</option>
-                  <option value="commercial">Commercial</option>
-                  {editingUser?.role === 'admin' && <option value="admin">Administrateur</option>}
+                  <option value="medecin">{t('team.role_medecin')}</option>
+                  <option value="estheticienne">{t('team.role_estheticienne')}</option>
+                  <option value="assistante">{t('team.role_assistante')}</option>
+                  <option value="commercial">{t('team.role_commercial')}</option>
+                  {editingUser?.role === 'admin' && <option value="admin">{t('team.role_admin')}</option>}
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="specialite">Spécialité</Label>
-                <Input id="specialite" value={formData.specialite} onChange={(e) => setFormData({...formData, specialite: e.target.value})} placeholder="ex: Dermatologie" />
+                <Label htmlFor="specialite">{t('team.specialite')}</Label>
+                <Input id="specialite" value={formData.specialite} onChange={(e) => setFormData({...formData, specialite: e.target.value})} placeholder={t('team.specialitePh')} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="color">Couleur Agenda</Label>
+                <Label htmlFor="color">{t('team.agendaColor')}</Label>
                 <div className="flex gap-2">
                   <Input id="color" type="color" value={formData.agenda_color} onChange={(e) => setFormData({...formData, agenda_color: e.target.value})} className="w-12 h-10 p-1" />
                   <Input value={formData.agenda_color} onChange={(e) => setFormData({...formData, agenda_color: e.target.value})} className="flex-1" />
@@ -421,12 +423,12 @@ export default function TeamPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="grid gap-2"><Label htmlFor="adresse">Adresse professionnelle</Label><Input id="adresse" value={formData.adresse} onChange={(e) => setFormData({...formData, adresse: e.target.value})} /></div>
-              <div className="grid gap-2"><Label htmlFor="date_embauche">Date d’embauche</Label><Input id="date_embauche" type="date" value={formData.date_embauche} onChange={(e) => setFormData({...formData, date_embauche: e.target.value})} /></div>
-              <div className="grid gap-2"><Label htmlFor="diplomes">Diplômes</Label><textarea id="diplomes" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder="Un diplôme par ligne" value={formData.diplomes} onChange={(e) => setFormData({...formData, diplomes: e.target.value})} /></div>
-              <div className="grid gap-2"><Label htmlFor="certifications">Certifications</Label><textarea id="certifications" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder="Une certification par ligne" value={formData.certifications} onChange={(e) => setFormData({...formData, certifications: e.target.value})} /></div>
-              <div className="grid gap-2"><Label htmlFor="documents_professionnels">Documents professionnels</Label><textarea id="documents_professionnels" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder="Références ou URLs, une par ligne" value={formData.documents_professionnels} onChange={(e) => setFormData({...formData, documents_professionnels: e.target.value})} /></div>
-              <div className="grid gap-2"><Label htmlFor="notes_internes">Notes internes</Label><textarea id="notes_internes" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" value={formData.notes_internes} onChange={(e) => setFormData({...formData, notes_internes: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="adresse">{t('team.adresse')}</Label><Input id="adresse" value={formData.adresse} onChange={(e) => setFormData({...formData, adresse: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="date_embauche">{t('team.dateEmbauche')}</Label><Input id="date_embauche" type="date" value={formData.date_embauche} onChange={(e) => setFormData({...formData, date_embauche: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="diplomes">{t('team.diplomes')}</Label><textarea id="diplomes" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder={t('team.diplomesPh')} value={formData.diplomes} onChange={(e) => setFormData({...formData, diplomes: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="certifications">{t('team.certifications')}</Label><textarea id="certifications" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder={t('team.certificationsPh')} value={formData.certifications} onChange={(e) => setFormData({...formData, certifications: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="documents_professionnels">{t('team.documents')}</Label><textarea id="documents_professionnels" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" placeholder={t('team.documentsPh')} value={formData.documents_professionnels} onChange={(e) => setFormData({...formData, documents_professionnels: e.target.value})} /></div>
+              <div className="grid gap-2"><Label htmlFor="notes_internes">{t('team.notes')}</Label><textarea id="notes_internes" className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm" value={formData.notes_internes} onChange={(e) => setFormData({...formData, notes_internes: e.target.value})} /></div>
             </div>
 
             <div className="flex items-start gap-3 rounded-md border p-4">
@@ -436,13 +438,13 @@ export default function TeamPage() {
                 onCheckedChange={(checked) => setFormData({ ...formData, is_public: checked === true })}
               />
               <div className="grid gap-1">
-                <Label htmlFor="is_public" className="cursor-pointer">Visible pour les réservations en ligne</Label>
-                <p className="text-sm text-muted-foreground">Contrôle uniquement la visibilité sur la landing page. Le praticien reste disponible dans l’agenda interne.</p>
+                <Label htmlFor="is_public" className="cursor-pointer">{t('team.publicLabel')}</Label>
+                <p className="text-sm text-muted-foreground">{t('team.publicHint')}</p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label>Actes pratiqués</Label>
+              <Label>{t('team.actsPracticed')}</Label>
               <div className="grid grid-cols-2 gap-2 border rounded-md p-4 bg-gray-50 max-h-48 overflow-y-auto">
                 {actes.map(acte => (
                   <div key={acte.id} className="flex items-center space-x-2">
@@ -460,8 +462,8 @@ export default function TeamPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
-            <Button onClick={handleSave}>Sauvegarder</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t('team.cancel')}</Button>
+            <Button onClick={handleSave}>{t('team.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -469,15 +471,15 @@ export default function TeamPage() {
       <Dialog open={Boolean(deletingUser)} onOpenChange={(open) => !open && !isDeleting && setDeletingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Supprimer ce membre ?</DialogTitle>
+            <DialogTitle>{t('team.deleteTitle')}</DialogTitle>
             <DialogDescription>
-              Le compte de {deletingUser?.prenom} {deletingUser?.nom} sera désactivé et anonymisé. Les données cliniques nécessaires à la traçabilité seront conservées.
+              {t('team.deleteDesc', { name: `${deletingUser?.prenom ?? ''} ${deletingUser?.nom ?? ''}`.trim() })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingUser(null)} disabled={isDeleting}>Annuler</Button>
+            <Button variant="outline" onClick={() => setDeletingUser(null)} disabled={isDeleting}>{t('team.cancel')}</Button>
             <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
-              {isDeleting ? 'Archivage…' : 'Confirmer l’archivage'}
+              {isDeleting ? t('team.archiving') : t('team.confirmArchive')}
             </Button>
           </DialogFooter>
         </DialogContent>

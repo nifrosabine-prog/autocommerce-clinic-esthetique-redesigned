@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -50,7 +51,9 @@ const EMPTY_FORM = {
   contre_indications: '', note_interne: '', consentement_marketing: false,
 };
 
-export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: PatientFormDialogProps) {
+export function PatientFormDialog({
+  open, onOpenChange, patient, onSaved }: PatientFormDialogProps) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const isEdit = !!patient;
   // Les esthéticiennes ne voient pas les antécédents médicaux (matrice RBAC
@@ -82,11 +85,11 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Pati
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
-    if (!form.nom.trim()) errs.nom = 'Le nom est requis';
-    if (!form.prenom.trim()) errs.prenom = 'Le prénom est requis';
-    if (!form.telephone.trim()) errs.telephone = 'Le téléphone est requis';
+    if (!form.nom.trim()) errs.nom = t('componentUi.lastNameRequired');
+    if (!form.prenom.trim()) errs.prenom = t('componentUi.firstNameRequired');
+    if (!form.telephone.trim()) errs.telephone = t('componentUi.phoneRequired');
     else if (!/^\+?\d{8,15}$/.test(form.telephone.replace(/\s/g, ''))) {
-      errs.telephone = 'Format de téléphone invalide';
+      errs.telephone = t('componentUi.invalidPhone');
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -121,21 +124,21 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Pati
     try {
       if (isEdit) {
         await api.patch(`/patients/${patient!.id}`, payload);
-        toast.success('Patient mis à jour');
+        toast.success(t('componentUi.patientUpdated'));
       } else {
         await api.post('/patients', payload);
-        toast.success('Patient créé');
+        toast.success(t('componentUi.patientCreated'));
       }
       onOpenChange(false);
       onSaved();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       if (err.response?.status === 409) {
-        toast.error(detail || 'Un patient avec ce téléphone existe déjà');
+        toast.error(detail || t('componentUi.duplicatePatient'));
       } else if (err.response?.status === 422 && Array.isArray(detail)) {
         toast.error(detail.map((d: any) => d.msg).join(', '));
       } else {
-        toast.error(detail || "Erreur lors de l'enregistrement");
+        toast.error(detail || t('componentUi.saveError'));
       }
     } finally {
       setIsSaving(false);
@@ -146,21 +149,21 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Pati
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Modifier le patient' : 'Nouveau patient'}</DialogTitle>
+          <DialogTitle>{isEdit ? t('componentUi.editPatient') : t('componentUi.newPatient')}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Mettez à jour les informations du patient.' : 'Renseignez les informations du nouveau patient.'}
+            {isEdit ? t('componentUi.editPatientDescription') : t('componentUi.newPatientDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="nom">Nom *</Label>
+              <Label htmlFor="nom">{t('componentUi.lastName')} *</Label>
               <Input id="nom" value={form.nom} onChange={(e) => handleChange('nom', e.target.value)} />
               {errors.nom && <p className="text-xs text-destructive mt-1">{errors.nom}</p>}
             </div>
             <div>
-              <Label htmlFor="prenom">Prénom *</Label>
+              <Label htmlFor="prenom">{t('componentUi.firstName')} *</Label>
               <Input id="prenom" value={form.prenom} onChange={(e) => handleChange('prenom', e.target.value)} />
               {errors.prenom && <p className="text-xs text-destructive mt-1">{errors.prenom}</p>}
             </div>
@@ -168,77 +171,77 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Pati
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="telephone">Téléphone *</Label>
+              <Label htmlFor="telephone">{t('componentUi.phone')} *</Label>
               <Input
                 id="telephone"
                 value={form.telephone}
                 onChange={(e) => handleChange('telephone', e.target.value)}
                 disabled={isEdit}
-                placeholder="+21620000000"
+                placeholder={t('componentUi.phonePlaceholder')}
               />
               {errors.telephone && <p className="text-xs text-destructive mt-1">{errors.telephone}</p>}
-              {isEdit && <p className="text-xs text-muted-foreground mt-1">Le téléphone ne peut pas être modifié ici.</p>}
+              {isEdit && <p className="text-xs text-muted-foreground mt-1">{t('componentUi.phoneImmutable')}</p>}
             </div>
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t('componentUi.email')}</Label>
               <Input id="email" type="email" value={form.email} onChange={(e) => handleChange('email', e.target.value)} />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="date_naissance">Date de naissance</Label>
+              <Label htmlFor="date_naissance">{t('componentUi.birthDate')}</Label>
               <Input id="date_naissance" type="date" value={form.date_naissance} onChange={(e) => handleChange('date_naissance', e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="genre">Genre</Label>
+              <Label htmlFor="genre">{t('componentUi.gender')}</Label>
               <select
                 id="genre"
                 value={form.genre}
                 onChange={(e) => handleChange('genre', e.target.value)}
                 className="w-full h-9 px-3 border rounded-md text-sm"
               >
-                <option value="">—</option>
-                <option value="F">Femme</option>
-                <option value="M">Homme</option>
+                <option value="">{t('componentUi.genderUnspecified')}</option>
+                <option value="F">{t('componentUi.female')}</option>
+                <option value="M">{t('componentUi.male')}</option>
               </select>
             </div>
             <div>
-              <Label htmlFor="groupe_sanguin">Groupe sanguin</Label>
-              <Input id="groupe_sanguin" value={form.groupe_sanguin} onChange={(e) => handleChange('groupe_sanguin', e.target.value)} placeholder="O+" />
+              <Label htmlFor="groupe_sanguin">{t('componentUi.bloodGroup')}</Label>
+              <Input id="groupe_sanguin" value={form.groupe_sanguin} onChange={(e) => handleChange('groupe_sanguin', e.target.value)} placeholder={t('componentUi.bloodGroupPlaceholder')} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="adresse">Adresse</Label>
+              <Label htmlFor="adresse">{t('componentUi.address')}</Label>
               <Input id="adresse" value={form.adresse} onChange={(e) => handleChange('adresse', e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="ville">Ville</Label>
+              <Label htmlFor="ville">{t('componentUi.city')}</Label>
               <Input id="ville" value={form.ville} onChange={(e) => handleChange('ville', e.target.value)} />
             </div>
           </div>
 
           <div>
-            <Label htmlFor="allergies">Allergies</Label>
+            <Label htmlFor="allergies">{t('componentUi.allergies')}</Label>
             <Textarea id="allergies" value={form.allergies} onChange={(e) => handleChange('allergies', e.target.value)} rows={2} />
           </div>
 
           <div>
-            <Label htmlFor="contre_indications">Contre-indications</Label>
+            <Label htmlFor="contre_indications">{t('componentUi.contraindications')}</Label>
             <Textarea id="contre_indications" value={form.contre_indications} onChange={(e) => handleChange('contre_indications', e.target.value)} rows={2} />
           </div>
 
           {canSeeAntecedents && (
             <div>
-              <Label htmlFor="antecedents_medicaux">Antécédents médicaux</Label>
+              <Label htmlFor="antecedents_medicaux">{t('componentUi.medicalHistory')}</Label>
               <Textarea id="antecedents_medicaux" value={form.antecedents_medicaux} onChange={(e) => handleChange('antecedents_medicaux', e.target.value)} rows={2} />
             </div>
           )}
 
           <div>
-            <Label htmlFor="note_interne">Note interne</Label>
+            <Label htmlFor="note_interne">{t('componentUi.internalNote')}</Label>
             <Textarea id="note_interne" value={form.note_interne} onChange={(e) => handleChange('note_interne', e.target.value)} rows={2} />
           </div>
 
@@ -249,16 +252,16 @@ export function PatientFormDialog({ open, onOpenChange, patient, onSaved }: Pati
               onCheckedChange={(checked) => handleChange('consentement_marketing', !!checked)}
             />
             <Label htmlFor="consentement_marketing" className="font-normal">
-              Consentement pour les communications marketing
+              {t('componentUi.marketingConsent')}
             </Label>
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
+              {t('componentUi.cancel')}
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? <Spinner className="h-4 w-4" /> : isEdit ? 'Enregistrer' : 'Créer'}
+              {isSaving ? <Spinner className="h-4 w-4" /> : isEdit ? t('componentUi.save') : t('componentUi.create')}
             </Button>
           </DialogFooter>
         </form>

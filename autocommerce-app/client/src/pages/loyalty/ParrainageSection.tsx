@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
   const [newFilleulId, setNewFilleulId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     if (patientId) {
@@ -44,8 +46,8 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
       const status = err?.response?.status;
       const detail = err?.response?.data?.detail;
       const message = detail || (status === 404
-        ? 'Patient introuvable ou anonymisé dans cette clinique.'
-        : 'Impossible de charger les données de parrainage.');
+        ? t('loyalty.referral.errors.patientNotFound')
+        : t('loyalty.referral.errors.load'));
       setLoadError(message);
       toast.error(message);
     } finally {
@@ -55,18 +57,18 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
 
   const copyCode = () => {
     navigator.clipboard.writeText(code);
-    toast.success('Code copié !');
+    toast.success(t('loyalty.referral.codeCopied'));
   };
 
   const handleUseCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const filleulId = Number(newFilleulId.trim());
     if (!Number.isInteger(filleulId) || filleulId <= 0) {
-      toast.error('Saisissez un identifiant patient numérique valide.');
+      toast.error(t('loyalty.referral.errors.invalidPatientId'));
       return;
     }
     if (filleulId === patientId) {
-      toast.error('Un patient ne peut pas être son propre filleul.');
+      toast.error(t('loyalty.referral.errors.selfReferral'));
       return;
     }
     
@@ -76,11 +78,11 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
         code: code,
         filleul_id: filleulId
       });
-      toast.success('Parrainage validé !');
+      toast.success(t('loyalty.referral.validated'));
       setNewFilleulId('');
       loadParrainageData();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la validation');
+      toast.error(err.response?.data?.detail || t('loyalty.referral.errors.validate'));
     } finally {
       setIsSubmitting(false);
     }
@@ -93,7 +95,7 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
         <CardContent className="space-y-3 p-6">
           <p role="alert" className="text-sm text-destructive">{loadError}</p>
           <Button type="button" variant="outline" onClick={loadParrainageData}>
-            Réessayer
+            {t('loyalty.referral.retry')}
           </Button>
         </CardContent>
       </Card>
@@ -107,10 +109,10 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gift className="w-5 h-5 text-primary" />
-              Votre Code Parrain
+              {t('loyalty.referral.codeTitle')}
             </CardTitle>
             <CardDescription>
-              Partagez ce code avec vos amies. Vous recevrez 50 points chacune lors de leur premier soin.
+              {t('loyalty.referral.codeDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,21 +135,21 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" />
-              Enregistrer un filleul
+              {t('loyalty.referral.registerTitle')}
             </CardTitle>
             <CardDescription>
-              Si une patiente vient de votre part, entrez son ID ici.
+              {t('loyalty.referral.registerDescription')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleUseCode} className="flex gap-2">
               <Input 
-                placeholder="ID de la patiente..." 
+                placeholder={t('loyalty.referral.patientIdPlaceholder')} 
                 value={newFilleulId}
                 onChange={(e) => setNewFilleulId(e.target.value)}
               />
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <Spinner className="h-4 w-4" /> : 'Valider'}
+                {isSubmitting ? <Spinner className="h-4 w-4" /> : t('loyalty.referral.validate')}
               </Button>
             </form>
           </CardContent>
@@ -156,29 +158,29 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Mes Filleuls ({filleuls.length})</CardTitle>
+          <CardTitle>{t('loyalty.referral.referralsTitle', { count: filleuls.length })}</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>ID Filleul</TableHead>
-                <TableHead>Statut Récompense</TableHead>
+                <TableHead>{t('loyalty.referral.colDate')}</TableHead>
+                <TableHead>{t('loyalty.referral.colPatientId')}</TableHead>
+                <TableHead>{t('loyalty.referral.colRewardStatus')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filleuls.map((f) => (
                 <TableRow key={f.id}>
-                  <TableCell>{new Date(f.date).toLocaleDateString()}</TableCell>
-                  <TableCell>Patient #{f.filleul_id}</TableCell>
+                  <TableCell>{new Date(f.date).toLocaleDateString(i18n.language)}</TableCell>
+                  <TableCell>{t('loyalty.referral.patientRef', { id: f.filleul_id })}</TableCell>
                   <TableCell>
                     {f.recompense_attribuee ? (
                       <span className="flex items-center gap-1 text-green-600 font-medium">
-                        <CheckCircle className="w-4 h-4" /> +50 points attribués
+                        <CheckCircle className="w-4 h-4" /> {t('loyalty.referral.rewardGranted')}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground">En attente</span>
+                      <span className="text-muted-foreground">{t('loyalty.referral.rewardPending')}</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -186,7 +188,7 @@ export function ParrainageSection({ patientId }: { patientId: number }) {
               {filleuls.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                    Vous n'avez pas encore de filleuls.
+                    {t('loyalty.referral.empty')}
                   </TableCell>
                 </TableRow>
               )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ interface Acte {
 }
 
 export default function ActesPage() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [actes, setActes] = useState<Acte[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -63,7 +65,7 @@ export default function ActesPage() {
       const res = await api.get('/settings/actes');
       setActes(res.data);
     } catch (err) {
-      toast.error('Erreur lors du chargement des actes');
+      toast.error(t('settings.actesLoadError'));
     } finally {
       setIsLoading(false);
     }
@@ -100,15 +102,15 @@ export default function ActesPage() {
     try {
       if (editingActe) {
         await api.patch(`/settings/actes/${editingActe.id}`, formData);
-        toast.success('Acte mis à jour');
+        toast.success(t('settings.acteUpdated'));
       } else {
         await api.post('/settings/actes', formData);
-        toast.success('Acte créé');
+        toast.success(t('settings.acteCreated'));
       }
       setIsDialogOpen(false);
       loadActes();
     } catch (err) {
-      toast.error('Erreur lors de la sauvegarde');
+      toast.error(t('settings.acteSaveError'));
     }
   };
 
@@ -117,11 +119,11 @@ export default function ActesPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Tarification des Actes</h1>
-            <p className="text-muted-foreground mt-1">Gérez le catalogue des soins et leurs prix</p>
+            <h1 className="text-3xl font-bold">{t('settings.actesPageTitle')}</h1>
+            <p className="text-muted-foreground mt-1">{t('settings.actesPageSubtitle')}</p>
           </div>
           <Button onClick={() => handleOpenDialog()}>
-            <Plus className="w-4 h-4 mr-2" /> Nouvel acte
+            <Plus className="w-4 h-4 mr-2" /> {t('settings.newActe')}
           </Button>
         </div>
 
@@ -133,12 +135,12 @@ export default function ActesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Catégorie</TableHead>
-                    <TableHead>Durée (min)</TableHead>
-                    <TableHead>Prix de base ({currency.currency_symbol})</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('settings.acteName')}</TableHead>
+                    <TableHead>{t('settings.category')}</TableHead>
+                    <TableHead>{t('settings.durationMinutes')}</TableHead>
+                    <TableHead>{t('settings.basePrice', { symbol: currency.currency_symbol })}</TableHead>
+                    <TableHead>{t('settings.status')}</TableHead>
+                    <TableHead className="text-right">{t('settings.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -150,7 +152,7 @@ export default function ActesPage() {
                       <TableCell>{Number(acte.prix_base).toFixed(3)}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${acte.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {acte.is_active ? 'Actif' : 'Inactif'}
+                          {acte.is_active ? t('settings.active') : t('settings.inactive')}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -170,36 +172,36 @@ export default function ActesPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingActe ? 'Modifier l\'acte' : 'Nouvel acte'}</DialogTitle>
-            <DialogDescription>Définissez les détails et le tarif de la prestation.</DialogDescription>
+            <DialogTitle>{editingActe ? t('settings.editActe') : t('settings.newActe')}</DialogTitle>
+            <DialogDescription>{t('settings.acteDialogDesc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="nom">Nom de l'acte *</Label>
-              <Input id="nom" value={formData.nom} onChange={(e) => setFormData({...formData, nom: e.target.value})} placeholder="ex: Lifting visage" />
+              <Label htmlFor="nom">{t('settings.acteNameRequired')}</Label>
+              <Input id="nom" value={formData.nom} onChange={(e) => setFormData({...formData, nom: e.target.value})} placeholder={t('settings.acteNamePlaceholder')} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="categorie">Catégorie</Label>
-                <Input id="categorie" value={formData.categorie} onChange={(e) => setFormData({...formData, categorie: e.target.value})} placeholder="ex: Chirurgie" />
+                <Label htmlFor="categorie">{t('settings.category')}</Label>
+                <Input id="categorie" value={formData.categorie} onChange={(e) => setFormData({...formData, categorie: e.target.value})} placeholder={t('settings.categoryPlaceholder')} />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="prix">Prix de base ({currency.currency_symbol})</Label>
+                <Label htmlFor="prix">{t('settings.basePrice', { symbol: currency.currency_symbol })}</Label>
                 <Input id="prix" type="number" step="0.001" value={formData.prix_base} onChange={(e) => setFormData({...formData, prix_base: Number(e.target.value)})} />
               </div>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description">{t('settings.description')}</Label>
               <Textarea id="description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} rows={2} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="protocole">Protocole (Instructions médecin)</Label>
-              <Textarea id="protocole" value={formData.protocole} onChange={(e) => setFormData({...formData, protocole: e.target.value})} rows={3} placeholder="Détails techniques pour le médecin..." />
+              <Label htmlFor="protocole">{t('settings.protocolInstructions')}</Label>
+              <Textarea id="protocole" value={formData.protocole} onChange={(e) => setFormData({...formData, protocole: e.target.value})} rows={3} placeholder={t('settings.protocolPlaceholder')} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
-            <Button onClick={handleSave}>Sauvegarder</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t('settings.cancel')}</Button>
+            <Button onClick={handleSave}>{t('settings.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

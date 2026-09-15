@@ -51,7 +51,7 @@ const STATUT_COLORS: Record<string, string> = {
 const STATUT_KEYS = Object.keys(STATUT_COLORS);
 
 export default function AgendaView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const canManage = user?.role === 'directrice' || user?.role === 'assistante' || user?.role === 'medecin';
@@ -91,13 +91,13 @@ export default function AgendaView() {
   const selectedDateLabel = (() => {
     if (view === 'jour') {
       const parsed = new Date(`${dateStr}T12:00:00`);
-      return parsed.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      return parsed.toLocaleDateString(i18n.language, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     }
     const first = new Date(`${weekDates[0]}T12:00:00`);
     const last = new Date(`${weekDates[weekDates.length - 1]}T12:00:00`);
     return t('agenda.weekOf', {
-      start: first.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-      end: last.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }),
+      start: first.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short' }),
+      end: last.toLocaleDateString(i18n.language, { day: 'numeric', month: 'short', year: 'numeric' }),
     });
   })();
 
@@ -283,7 +283,7 @@ export default function AgendaView() {
                   <div key={request.id} className="flex flex-col gap-3 rounded-lg border bg-white p-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="font-medium">{request.prenom} {request.nom}</p>
-                      <p className="text-sm text-muted-foreground">{request.telephone} · {new Date(request.date_heure).toLocaleString('fr-FR')}</p>
+                      <p className="text-sm text-muted-foreground">{request.telephone} · {new Date(request.date_heure).toLocaleString(i18n.language)}</p>
                       <p className="text-sm text-muted-foreground">{t('agenda.requestNumber', { id: request.id })}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -345,7 +345,7 @@ export default function AgendaView() {
                   <div key={date} className={`space-y-3 p-3 rounded-lg border ${isToday ? 'bg-purple-50/50 border-purple-200' : 'bg-card'}`}>
                     <div className="text-center pb-2 border-b">
                       <p className="text-[10px] uppercase text-muted-foreground font-bold">
-                        {d.toLocaleDateString('fr-FR', { weekday: 'short' })}
+                        {d.toLocaleDateString(i18n.language, { weekday: 'short' })}
                       </p>
                       <p className={`text-lg font-bold ${isToday ? 'text-purple-700' : ''}`}>
                         {d.getDate()}
@@ -357,7 +357,7 @@ export default function AgendaView() {
                       ) : (
                         dayRdvs.map(rdv => (
                           <div key={rdv.id} className="p-2 rounded bg-white border text-[10px] shadow-sm">
-                            <p className="font-bold">{new Date(rdv.date_heure_debut).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+                            <p className="font-bold">{new Date(rdv.date_heure_debut).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}</p>
                             <p className="truncate">{rdv.patient_nom}</p>
                             <p className="text-muted-foreground truncate">{rdv.acte_nom}</p>
                           </div>
@@ -383,7 +383,7 @@ export default function AgendaView() {
                         <div className="flex items-center gap-2 mb-2">
                           <Clock className="w-4 h-4 text-muted-foreground" />
                           <span className="font-semibold">
-                            {new Date(appointment.date_heure_debut).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(appointment.date_heure_debut).toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statutInfo.color}`}>
                             {statutInfo.label}
@@ -483,7 +483,7 @@ interface CreneauDisponible { heure: string; datetime: string }
 function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
   open: boolean; onOpenChange: (v: boolean) => void; defaultDate: string; onCreated: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [patientAutocompleteKey, setPatientAutocompleteKey] = useState(0);
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
   const [patientId, setPatientId] = useState('');
@@ -541,7 +541,7 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
                 datetime: slot,
                 heure: Number.isNaN(parsed.getTime())
                   ? slot
-                  : parsed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+                  : parsed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' }),
               };
             }
             if (!slot || typeof slot !== 'object') return null;
@@ -551,7 +551,7 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
               datetime: candidate.datetime,
               heure: typeof candidate.heure === 'string' && candidate.heure
                 ? candidate.heure
-                : new Date(candidate.datetime).toLocaleTimeString('fr-FR', {
+                : new Date(candidate.datetime).toLocaleTimeString(i18n.language, {
                     hour: '2-digit', minute: '2-digit',
                   }),
             };
@@ -572,11 +572,11 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patientId || !praticienId || !acteId || !creneau) {
-      toast.error('Merci de compléter tous les champs requis');
+      toast.error(t('agenda.fillRequiredFields'));
       return;
     }
     if (!creneaux.some((slot) => slot.datetime === creneau)) {
-      toast.error('Ce créneau n’est plus disponible. Rechargez la liste.');
+      toast.error(t('agenda.slotNoLongerAvailable'));
       return;
     }
     setIsSaving(true);
@@ -588,11 +588,11 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
         date_heure: creneau,
         salle: salle || undefined,
       });
-      toast.success('Rendez-vous créé');
+      toast.success(t('agenda.createAppointmentSuccess'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la création du RDV');
+      toast.error(err.response?.data?.detail || t('agenda.createAppointmentError'));
     } finally {
       setIsSaving(false);
     }
@@ -602,8 +602,8 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nouveau rendez-vous</DialogTitle>
-          <DialogDescription>Recherchez le patient puis choisissez un créneau libre.</DialogDescription>
+          <DialogTitle>{t('agenda.newAppointmentTitle')}</DialogTitle>
+          <DialogDescription>{t('agenda.newAppointmentDescription')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <PatientAutocomplete
@@ -614,16 +614,16 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="praticien">Médecin *</Label>
+              <Label htmlFor="praticien">{t('agenda.practitioner')} *</Label>
               <select id="praticien" value={praticienId} onChange={(e) => setPraticienId(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-                <option value="">Sélectionner</option>
+                <option value="">{t('common.select')}</option>
                 {praticiens.map((p) => <option key={p.id} value={p.id}>{p.prenom} {p.nom}</option>)}
               </select>
             </div>
             <div>
-              <Label htmlFor="acte">Acte *</Label>
+              <Label htmlFor="acte">{t('agenda.act')} *</Label>
               <select id="acte" value={acteId} onChange={(e) => setActeId(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-                <option value="">Sélectionner</option>
+                <option value="">{t('common.select')}</option>
                 {actes.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
               </select>
             </div>
@@ -631,18 +631,18 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="rdv-date">Date *</Label>
+              <Label htmlFor="rdv-date">{t('agenda.date')} *</Label>
               <Input id="rdv-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="creneau">Créneau *</Label>
+              <Label htmlFor="creneau">{t('agenda.slot')} *</Label>
               {!acteId ? (
-                <p className="text-xs text-muted-foreground py-2">Choisissez d’abord un acte pour calculer sa durée.</p>
+                <p className="text-xs text-muted-foreground py-2">{t('agenda.chooseActFirst')}</p>
               ) : isLoadingCreneaux ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2"><Spinner className="h-4 w-4" /> Recherche...</div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-2"><Spinner className="h-4 w-4" /> {t('agenda.searching')}</div>
               ) : (
                 <select id="creneau" value={creneau} onChange={(e) => setCreneau(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm" disabled={creneaux.length === 0}>
-                  <option value="">{creneaux.length === 0 ? 'Aucun créneau disponible' : 'Sélectionner'}</option>
+                  <option value="">{creneaux.length === 0 ? t('agenda.noSlotAvailable') : t('common.select')}</option>
                   {creneaux.map((c) => (
                     <option key={c.datetime} value={c.datetime}>{c.heure}</option>
                   ))}
@@ -652,13 +652,13 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
           </div>
 
           <div>
-            <Label htmlFor="salle">Salle</Label>
-            <Input id="salle" value={salle} onChange={(e) => setSalle(e.target.value)} placeholder="Optionnel" />
+            <Label htmlFor="salle">{t('agenda.room')}</Label>
+            <Input id="salle" value={salle} onChange={(e) => setSalle(e.target.value)} placeholder={t('common.optional')} />
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Créer le RDV'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('agenda.createButton')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -669,6 +669,7 @@ function NewRdvDialog({ open, onOpenChange, defaultDate, onCreated }: {
 function CancelRdvDialog({ appointment, onOpenChange, onCancelled }: {
   appointment: Appointment | null; onOpenChange: () => void; onCancelled: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [raison, setRaison] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -677,17 +678,17 @@ function CancelRdvDialog({ appointment, onOpenChange, onCancelled }: {
   const handleConfirm = async () => {
     if (!appointment) return;
     if (raison.trim().length < 3) {
-      toast.error('Merci de préciser un motif (3 caractères minimum)');
+      toast.error(t('agenda.cancelReasonTooShort'));
       return;
     }
     setIsSaving(true);
     try {
       await api.delete(`/agenda/rdv/${appointment.id}`, { params: { raison: raison.trim() } });
-      toast.success('Rendez-vous annulé');
+      toast.success(t('agenda.cancelSuccess'));
       onOpenChange();
       onCancelled();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'annulation");
+      toast.error(err.response?.data?.detail || t('agenda.cancelError'));
     } finally {
       setIsSaving(false);
     }
@@ -697,19 +698,19 @@ function CancelRdvDialog({ appointment, onOpenChange, onCancelled }: {
     <Dialog open={!!appointment} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Annuler le rendez-vous</DialogTitle>
+          <DialogTitle>{t('agenda.cancelAppointment')}</DialogTitle>
           <DialogDescription>
-            {appointment && `${appointment.patient_nom} — ${new Date(appointment.date_heure_debut).toLocaleString('fr-FR')}`}
+            {appointment && `${appointment.patient_nom} — ${new Date(appointment.date_heure_debut).toLocaleString(i18n.language)}`}
           </DialogDescription>
         </DialogHeader>
         <div>
-          <Label htmlFor="raison">Motif de l'annulation *</Label>
+          <Label htmlFor="raison">{t('agenda.cancelReasonLabel')} *</Label>
           <Textarea id="raison" value={raison} onChange={(e) => setRaison(e.target.value)} rows={3} />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onOpenChange}>Retour</Button>
+          <Button variant="outline" onClick={onOpenChange}>{t('agenda.back')}</Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={isSaving}>
-            {isSaving ? <Spinner className="h-4 w-4" /> : "Confirmer l'annulation"}
+            {isSaving ? <Spinner className="h-4 w-4" /> : t('agenda.confirmCancel')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -724,6 +725,7 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
   onRescheduled: () => void;
 }) {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [date, setDate] = useState('');
   const [heure, setHeure] = useState('');
   const [salle, setSalle] = useState('');
@@ -737,13 +739,13 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
     if (!appointment) return;
     const current = new Date(appointment.date_heure_debut);
     setDate(toLocalDateInput(current));
-    setHeure(current.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    setHeure(current.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' }));
     setSalle(appointment.salle || '');
     setPraticienId(String(appointment.praticien_id));
     setSuggestions([]);
     api.get('/agenda/praticiens').then((response) => {
       setPraticiens(Array.isArray(response.data) ? response.data : []);
-    }).catch(() => toast.error('Impossible de charger les praticiens'));
+    }).catch(() => toast.error(t('agenda.practitionersLoadError')));
   }, [appointment]);
 
   const loadSuggestions = async () => {
@@ -752,9 +754,9 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
     try {
       const response = await api.get(`/agenda/rdv/${appointment.id}/suggestions`, { params: { date } });
       setSuggestions(Array.isArray(response.data?.suggestions) ? response.data.suggestions : []);
-      if (!response.data?.suggestions?.length) toast.info('Aucun créneau disponible pour cette date');
+      if (!response.data?.suggestions?.length) toast.info(t('agenda.noSlotForDate'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Impossible de calculer les suggestions');
+      toast.error(err.response?.data?.detail || t('agenda.suggestionsError'));
     } finally {
       setIsLoadingSuggestions(false);
     }
@@ -764,12 +766,12 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
     const parsed = new Date(datetime);
     if (Number.isNaN(parsed.getTime())) return;
     setDate(toLocalDateInput(parsed));
-    setHeure(parsed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
+    setHeure(parsed.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' }));
   };
 
   const handleSave = async () => {
     if (!appointment || !date || !heure) {
-      toast.error('Sélectionnez une date et une heure');
+      toast.error(t('agenda.selectDateTime'));
       return;
     }
     setIsSaving(true);
@@ -779,11 +781,11 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
         salle: salle || null,
         praticien_id: praticienId ? Number(praticienId) : null,
       });
-      toast.success('Rendez-vous replanifié avec succès');
+      toast.success(t('agenda.rescheduleSuccess'));
       onOpenChange();
       onRescheduled();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Conflit détecté : le rendez-vous n’a pas été déplacé');
+      toast.error(err.response?.data?.detail || t('agenda.rescheduleConflict'));
     } finally {
       setIsSaving(false);
     }
@@ -793,18 +795,18 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
     <Dialog open={!!appointment} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Modifier / Replanifier le rendez-vous</DialogTitle>
+          <DialogTitle>{t('agenda.rescheduleTitle')}</DialogTitle>
           <DialogDescription>
-            {appointment && `${appointment.patient_nom} · ${appointment.acte_nom || 'Acte'} · ${appointment.praticien_nom}`}
+            {appointment && `${appointment.patient_nom} · ${appointment.acte_nom || t('agenda.noActeSpecified')} · ${appointment.praticien_nom}`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div><Label htmlFor="reschedule-date">Date *</Label><Input id="reschedule-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-            <div><Label htmlFor="reschedule-time">Heure *</Label><Input id="reschedule-time" type="time" value={heure} onChange={(e) => setHeure(e.target.value)} /></div>
+            <div><Label htmlFor="reschedule-date">{t('agenda.date')} *</Label><Input id="reschedule-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+            <div><Label htmlFor="reschedule-time">{t('agenda.time')} *</Label><Input id="reschedule-time" type="time" value={heure} onChange={(e) => setHeure(e.target.value)} /></div>
           </div>
           <div>
-            <Label htmlFor="reschedule-practitioner">Praticien *</Label>
+            <Label htmlFor="reschedule-practitioner">{t('agenda.practitioner')} *</Label>
             <select id="reschedule-practitioner" value={praticienId} onChange={(e) => setPraticienId(e.target.value)} className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm">
               {/* Doit rester aligné avec CLINICAL_SELF_SCOPED_ROLES côté backend (agenda_clinic.py) */}
               {praticiens.filter((praticien) => !['medecin', 'estheticienne'].includes(user?.role || '') || praticien.id === user?.id).map((praticien) => (
@@ -812,15 +814,15 @@ function RescheduleRdvDialog({ appointment, onOpenChange, onRescheduled }: {
               ))}
             </select>
           </div>
-          <div><Label htmlFor="reschedule-room">Salle / emplacement</Label><Input id="reschedule-room" value={salle} onChange={(e) => setSalle(e.target.value)} placeholder="Ex. Salle 2" /></div>
+          <div><Label htmlFor="reschedule-room">{t('agenda.room')}</Label><Input id="reschedule-room" value={salle} onChange={(e) => setSalle(e.target.value)} placeholder={t('agenda.roomPlaceholder')} /></div>
           <div className="rounded-lg border bg-slate-50 p-3">
-            <div className="flex items-center justify-between gap-3"><div><p className="font-medium">Assistant de planification</p><p className="text-xs text-muted-foreground">Détecte les chevauchements et propose des créneaux disponibles.</p></div><Button type="button" size="sm" variant="outline" onClick={loadSuggestions} disabled={isLoadingSuggestions || !date}>{isLoadingSuggestions ? <Spinner className="h-4 w-4" /> : 'Suggérer'}</Button></div>
-            {suggestions.length > 0 && <div className="mt-3 space-y-2">{suggestions.map((suggestion) => <button type="button" key={suggestion.datetime} onClick={() => selectSuggestion(suggestion.datetime)} className="flex w-full items-center justify-between rounded-md border bg-white p-2 text-left transition hover:border-primary"><span><strong className="block text-sm">{new Date(suggestion.datetime).toLocaleString('fr-FR')}</strong><small className="text-muted-foreground">{suggestion.reason}</small></span><span className="text-xs font-semibold text-emerald-700">Score {suggestion.score}</span></button>)}</div>}
+            <div className="flex items-center justify-between gap-3"><div><p className="font-medium">{t('agenda.schedulingAssistant')}</p><p className="text-xs text-muted-foreground">{t('agenda.schedulingAssistantHint')}</p></div><Button type="button" size="sm" variant="outline" onClick={loadSuggestions} disabled={isLoadingSuggestions || !date}>{isLoadingSuggestions ? <Spinner className="h-4 w-4" /> : t('agenda.suggest')}</Button></div>
+            {suggestions.length > 0 && <div className="mt-3 space-y-2">{suggestions.map((suggestion) => <button type="button" key={suggestion.datetime} onClick={() => selectSuggestion(suggestion.datetime)} className="flex w-full items-center justify-between rounded-md border bg-white p-2 text-left transition hover:border-primary"><span><strong className="block text-sm">{new Date(suggestion.datetime).toLocaleString(i18n.language)}</strong><small className="text-muted-foreground">{suggestion.reason}</small></span><span className="text-xs font-semibold text-emerald-700">{t('agenda.score', { value: suggestion.score })}</span></button>)}</div>}
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onOpenChange}>Annuler</Button>
-          <Button type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Enregistrer la modification'}</Button>
+          <Button type="button" variant="outline" onClick={onOpenChange}>{t('common.cancel')}</Button>
+          <Button type="button" onClick={handleSave} disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('agenda.saveChanges')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

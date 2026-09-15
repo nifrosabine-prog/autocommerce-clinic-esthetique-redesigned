@@ -2,44 +2,43 @@
 .env
 .env.*
 !.env.example
-!*.env.example
+production.env
+offsite.env
+*.pem
+*.key
+*.crt
 
 # Python
-.venv/
-venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
+.mypy_cache/
+.venv/
+venv/
 
 # Node / frontend
 node_modules/
-autocommerce-app/dist/
-api-server/web-dist/
-coverage/
+dist/
+.vite/
 playwright-report/
 test-results/
 
-# Runtime and patient-generated data
+# Runtime and generated evidence
 runtime-data/
-data/uploads/
-uploads/
 backups/
-*.db
+evidence/
+evidence_branding/
+*.bin
 *.sqlite
 *.sqlite3
-*.log
-*.pid
 
-# Local QA artifacts
-qa_photo_*
-photo_test_*
-qa_smoke_result.txt
-
-# OS / IDE
+# OS and editors
 .DS_Store
-.idea/
+Thumbs.db
 .vscode/
+.idea/
+*.swp
+
+# Logs
+*.log

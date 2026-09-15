@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,6 +42,7 @@ interface TopTreatment {
 }
 
 export default function BusinessIntelligence() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currency = useCurrency();
   const [isLoading, setIsLoading] = useState(true);
@@ -76,7 +78,7 @@ export default function BusinessIntelligence() {
         if (foreRes.data?.data) setForecast(foreRes.data.data);
         if (kpiRes.data?.data) setKpis(kpiRes.data.data.kpis);
       } catch (err: any) {
-        setError(err.message || 'Erreur lors du chargement des données');
+        setError(err.message || t('bi.errorLoad'));
       } finally {
         setIsLoading(false);
       }
@@ -101,12 +103,12 @@ export default function BusinessIntelligence() {
         {/* Titre */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Business Intelligence</h1>
-            <p className="text-gray-600 mt-2">Analyses et rapports détaillés</p>
+            <h1 className="text-3xl font-bold text-gray-900">{t('bi.title')}</h1>
+            <p className="text-gray-600 mt-2">{t('bi.subtitle')}</p>
           </div>
           <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             <Download className="w-5 h-5" />
-            Exporter Rapport
+            {t('bi.exportReport')}
           </button>
         </div>
 
@@ -127,41 +129,41 @@ export default function BusinessIntelligence() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Revenus Aujourd'hui</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">{t('bi.revenueToday')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{kpis.revenue_today.toFixed(2)} {currency.currency_symbol}</div>
-                <p className="text-xs text-gray-500 mt-2">Factures payées</p>
+                <p className="text-xs text-gray-500 mt-2">{t('bi.paidInvoices')}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Revenus du Mois</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">{t('bi.revenueMonth')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{kpis.revenue_month.toFixed(2)} {currency.currency_symbol}</div>
-                <p className="text-xs text-gray-500 mt-2">Cumul mensuel</p>
+                <p className="text-xs text-gray-500 mt-2">{t('bi.monthlyTotal')}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">RDV Aujourd'hui</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">{t('bi.rdvToday')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{kpis.rdvs_today}</div>
-                <p className="text-xs text-gray-500 mt-2">Rendez-vous planifiés</p>
+                <p className="text-xs text-gray-500 mt-2">{t('bi.plannedRdv')}</p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">Patients Actifs</CardTitle>
+                <CardTitle className="text-sm font-medium text-gray-600">{t('bi.activePatients')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{kpis.total_active_patients}</div>
-                <p className="text-xs text-gray-500 mt-2">Base active</p>
+                <p className="text-xs text-gray-500 mt-2">{t('bi.activeBase')}</p>
               </CardContent>
             </Card>
           </div>
@@ -170,11 +172,11 @@ export default function BusinessIntelligence() {
         {/* Onglets */}
         <div className="flex gap-2 border-b overflow-x-auto">
           {[
-            { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3 },
-            { id: 'practitioners', label: 'Médecins', icon: Users },
-            { id: 'treatments', label: 'Soins', icon: Zap },
-            { id: 'patients', label: 'Patients', icon: Users },
-            { id: 'forecast', label: 'Prévisions', icon: TrendingUp },
+            { id: 'overview', label: t('bi.tab_overview'), icon: BarChart3 },
+            { id: 'practitioners', label: t('bi.tab_practitioners'), icon: Users },
+            { id: 'treatments', label: t('bi.tab_treatments'), icon: Zap },
+            { id: 'patients', label: t('bi.tab_patients'), icon: Users },
+            { id: 'forecast', label: t('bi.tab_forecast'), icon: TrendingUp },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -199,20 +201,20 @@ export default function BusinessIntelligence() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Résumé des Revenus (30 derniers jours)</CardTitle>
+                <CardTitle>{t('bi.revenueSummary')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <p className="text-sm text-gray-600">Revenu Total</p>
+                    <p className="text-sm text-gray-600">{t('bi.totalRevenue')}</p>
                     <p className="text-3xl font-bold text-green-600">{revenueSummary.total_revenue.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Nombre de Factures</p>
+                    <p className="text-sm text-gray-600">{t('bi.invoicesCount')}</p>
                     <p className="text-3xl font-bold">{revenueSummary.total_invoices}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Facture Moyenne</p>
+                    <p className="text-sm text-gray-600">{t('bi.avgInvoice')}</p>
                     <p className="text-3xl font-bold">{revenueSummary.avg_invoice.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                 </div>
@@ -221,7 +223,7 @@ export default function BusinessIntelligence() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Top 5 Actes par Revenu</CardTitle>
+                <CardTitle>{t('bi.topActes')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -232,7 +234,7 @@ export default function BusinessIntelligence() {
                       <div key={acte} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                         <div>
                           <p className="font-medium">{acte}</p>
-                          <p className="text-sm text-gray-600">{data.count} fois</p>
+                          <p className="text-sm text-gray-600">{t('bi.times', { count: data.count })}</p>
                         </div>
                         <p className="font-bold">{data.revenue.toFixed(2)} {currency.currency_symbol}</p>
                       </div>
@@ -254,19 +256,19 @@ export default function BusinessIntelligence() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Revenu</span>
+                      <span className="text-gray-600">{t('bi.revenue')}</span>
                       <span className="font-bold">{practitioner.revenue.toFixed(2)} {currency.currency_symbol}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Patients uniques</span>
+                      <span className="text-gray-600">{t('bi.uniquePatients')}</span>
                       <span className="font-bold">{practitioner.unique_patients}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">RDV complétés</span>
+                      <span className="text-gray-600">{t('bi.completedRdv')}</span>
                       <span className="font-bold">{practitioner.completed_rdvs}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Satisfaction</span>
+                      <span className="text-gray-600">{t('bi.satisfaction')}</span>
                       <span className="font-bold">⭐ {practitioner.avg_satisfaction}/5</span>
                     </div>
                   </div>
@@ -287,19 +289,19 @@ export default function BusinessIntelligence() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Revenu Total</span>
+                      <span className="text-gray-600">{t('bi.totalRevenue')}</span>
                       <span className="font-bold">{treatment.revenue.toFixed(2)} {currency.currency_symbol}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Nombre de fois</span>
+                      <span className="text-gray-600">{t('bi.timesCount')}</span>
                       <span className="font-bold">{treatment.count}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Patients uniques</span>
+                      <span className="text-gray-600">{t('bi.uniquePatients')}</span>
                       <span className="font-bold">{treatment.unique_patients}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Satisfaction</span>
+                      <span className="text-gray-600">{t('bi.satisfaction')}</span>
                       <span className="font-bold">⭐ {treatment.avg_satisfaction}/5</span>
                     </div>
                   </div>
@@ -313,7 +315,7 @@ export default function BusinessIntelligence() {
         {activeTab === 'patients' && (
           <Card>
             <CardHeader>
-              <CardTitle>Top Patients Fidèles</CardTitle>
+              <CardTitle>{t('bi.topLoyal')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -321,7 +323,7 @@ export default function BusinessIntelligence() {
                   <div key={patient.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                     <div>
                       <p className="font-medium">{patient.name}</p>
-                      <p className="text-sm text-gray-600">{patient.visits} visites</p>
+                      <p className="text-sm text-gray-600">{t('bi.visits', { count: patient.visits })}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-bold">{patient.total_ca.toFixed(2)} {currency.currency_symbol}</p>
@@ -344,29 +346,29 @@ export default function BusinessIntelligence() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
-                Prévision des Revenus (30 jours)
+                {t('bi.forecastTitle')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">Total prévu</p>
+                    <p className="text-sm text-gray-600">{t('bi.totalForecast')}</p>
                     <p className="text-3xl font-bold text-blue-600">{forecast.total_forecast.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Moyenne quotidienne</p>
+                    <p className="text-sm text-gray-600">{t('bi.avgDaily')}</p>
                     <p className="text-3xl font-bold">{forecast.avg_daily_revenue.toFixed(2)} {currency.currency_symbol}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">Répartition par jour</p>
+                  <p className="text-sm text-gray-600 mb-2">{t('bi.byDay')}</p>
                   <div className="space-y-1 max-h-64 overflow-y-auto">
                     {(Object.entries(forecast.forecast_by_day) as [string, number][])
                       .slice(-7)
                       .map(([day, revenue]) => (
                         <div key={day} className="flex items-center justify-between text-sm">
-                          <span>{new Date(day).toLocaleDateString('fr-FR')}</span>
+                          <span>{new Date(day).toLocaleDateString(i18n.language)}</span>
                           <div className="flex items-center gap-2">
                             <div className="w-32 bg-gray-200 rounded h-2">
                               <div

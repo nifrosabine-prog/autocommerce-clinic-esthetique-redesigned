@@ -190,7 +190,7 @@ async def export_patient_pdf(
     from fastapi.responses import Response
     pdf_bytes = await export_dossier_pdf(
         patient_id, db,
-        user_role=current_user.get("role"),
+        user=current_user,
         clinic_id=current_user["clinic_id"]
     )
     return Response(

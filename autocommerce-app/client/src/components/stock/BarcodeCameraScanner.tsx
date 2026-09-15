@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType, NotFoundException } from '@zxing/library';
@@ -22,12 +23,14 @@ interface BarcodeCameraScannerProps {
  *    sur certains téléphones ;
  *  - formats restreints pour une détection plus rapide ;
  *  - repli automatique sur la caméra arrière ;
- *  - panneau « Code détecté » avec boutons explicites : Valider le scan,
- *    Scanner à nouveau, Annuler.
+ *  - panneau « Code détecté » avec boutons explicites : {t('componentUi.validateScan')},
+ *    {t('componentUi.scanAgain')}, {t('componentUi.cancel')}.
  *
  * Le résultat est présenté à l'utilisateur avant transmission au flux stock.
  */
-export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact = false }: BarcodeCameraScannerProps) {
+export function BarcodeCameraScanner({
+  onDetected, onReceptionDetected, compact = false }: BarcodeCameraScannerProps) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -176,20 +179,20 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
 
       await listCameras().catch(() => undefined);
     } catch (e: any) {
-      let message = 'Impossible d’accéder à la caméra.';
+      let message = t('componentUi.cameraAccess');
       if (e?.name === 'NotAllowedError') {
-        message = 'Accès caméra refusé. Autorisez la caméra dans les paramètres du navigateur.';
+        message = t('componentUi.cameraDenied');
       } else if (e?.name === 'NotFoundError') {
-        message = 'Aucune caméra détectée sur cet appareil.';
+        message = t('componentUi.noCamera');
       } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        message = 'Le scan caméra nécessite une connexion HTTPS.';
+        message = t('componentUi.httpsRequired');
       }
       setError(message);
       setIsActive(false);
     } finally {
       setIsStarting(false);
     }
-  }, [getReader, listCameras, publishDetectedCode, startNativeFallback]);
+  }, [getReader, listCameras, publishDetectedCode, startNativeFallback, t]);
 
   const stop = useCallback(() => {
     controlsRef.current?.stop();
@@ -244,16 +247,17 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
           disabled={isStarting}
         >
           {isActive ? <CameraOff className="w-4 h-4 mr-2" /> : <Camera className="w-4 h-4 mr-2" />}
-          {isStarting ? 'Démarrage...' : isActive ? 'Arrêter la caméra' : 'Scanner avec la caméra'}
+          {isStarting ? t('componentUi.starting') : isActive ? t('componentUi.stopCamera') : t('componentUi.scanCamera')}
         </Button>
         {devices.length > 1 && isActive && (
           <select
             value={deviceId}
             onChange={(e) => switchDevice(e.target.value)}
+            aria-label={t('componentUi.cameraSelection')}
             className="h-9 px-3 border rounded-md text-sm bg-background"
           >
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>{d.label || 'Caméra'}</option>
+            {devices.map((d, index) => (
+              <option key={d.deviceId} value={d.deviceId}>{d.label || t('componentUi.cameraNumber', { number: index + 1 })}</option>
             ))}
           </select>
         )}
@@ -269,7 +273,7 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
       {pendingCode && (
         <div className="flex flex-col gap-3 rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
           <div>
-            <span className="font-medium block mb-1">Code détecté — vérifiez puis validez :</span>
+            <span className="font-medium block mb-1">{t('componentUi.detectedCode')}</span>
             <span className="font-mono text-base break-all bg-background border rounded px-2 py-1 inline-block">
               {pendingCode}
             </span>
@@ -277,17 +281,17 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
           <div className="flex flex-wrap gap-2">
             {onReceptionDetected && (
               <Button type="button" variant="secondary" onClick={validateReceptionCode}>
-                <PackagePlus className="w-4 h-4 mr-1" /> Ajouter du stock / Réception
+                <PackagePlus className="w-4 h-4 mr-1" /> {t('componentUi.addStockReception')}
               </Button>
             )}
             <Button type="button" onClick={validateDetectedCode}>
-              <Check className="w-4 h-4 mr-1" /> Valider le scan
+              <Check className="w-4 h-4 mr-1" /> {t('componentUi.validateScan')}
             </Button>
             <Button type="button" variant="outline" onClick={rescan}>
-              <RotateCcw className="w-4 h-4 mr-1" /> Scanner à nouveau
+              <RotateCcw className="w-4 h-4 mr-1" /> {t('componentUi.scanAgain')}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setPendingCode(null)}>
-              <X className="w-4 h-4 mr-1" /> Annuler
+              <X className="w-4 h-4 mr-1" /> {t('componentUi.cancel')}
             </Button>
           </div>
         </div>
@@ -296,7 +300,7 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
       <div
         className={`relative overflow-hidden rounded-md bg-black ${isActive ? '' : 'hidden'} ${compact ? 'aspect-video max-h-48' : 'aspect-video'}`}
       >
-        <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+        <video ref={videoRef} className="w-full h-full object-cover" aria-label={t('componentUi.scannerVideo')} muted playsInline />
         {isActive && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="w-2/3 h-2/3 border-2 border-white/70 rounded-lg" />
@@ -305,8 +309,7 @@ export function BarcodeCameraScanner({ onDetected, onReceptionDetected, compact 
       </div>
       {!isActive && !pendingCode && !error && (
         <p className="text-xs text-muted-foreground">
-          Pointez la caméra vers un QR code ou un code-barres du lot. Le code s’affichera ici pour
-          validation avant enregistrement.
+          {t('componentUi.pointCamera')}
         </p>
       )}
     </div>

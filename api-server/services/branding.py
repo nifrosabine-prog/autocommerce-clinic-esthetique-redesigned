@@ -234,10 +234,34 @@ def save_logo(file_bytes: bytes, mime_type: str, clinic_id: int | None = None) -
     os.makedirs(str(branding_dir), exist_ok=True)
     filename = f"logo-{uuid.uuid4().hex[:12]}.{MIME_TO_EXT[mime_type]}"
     filepath = os.path.join(str(branding_dir), filename)
+    image = PILImage.open(io.BytesIO(file_bytes))
+    image.thumbnail((600, 300), PILImage.Resampling.LANCZOS)
+    normalized = io.BytesIO()
+    output_format = MIME_TO_PIL_FORMAT[mime_type].upper()
+    if output_format == "JPG":
+        output_format = "JPEG"
+        image = image.convert("RGB")
+    image.save(normalized, format=output_format, optimize=True)
     with open(filepath, "wb") as f:
-        f.write(file_bytes)
+        f.write(normalized.getvalue())
 
     return f"/static/branding/{relative_dir + '/' if relative_dir else ''}{filename}"
+
+
+def resolve_logo_path(logo_url: str | None):
+    """Résout uniquement les logos générés par ``save_logo``.
+
+    Les URLs externes ou les chemins contenant une traversée ne sont jamais
+    lus par les exports PDF. Cela empêche l’injection d’un fichier arbitraire.
+    """
+    if not logo_url or not logo_url.startswith("/static/branding/"):
+        return None
+    relative = logo_url.removeprefix("/static/branding/")
+    candidate = (settings.branding_dir / relative).resolve()
+    root = settings.branding_dir.resolve()
+    if root not in candidate.parents or not candidate.is_file():
+        return None
+    return candidate
 
 
 def save_hero(file_bytes: bytes, mime_type: str, clinic_id: int | None = None) -> str:

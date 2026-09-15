@@ -386,14 +386,14 @@ export const settingsApi = {
     const formData = new FormData();
     formData.append('file', file);
     return api.post<{ logo_url: string }>('/settings/branding/logo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
     });
   },
   uploadHero: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post<{ photo_hero_url: string }>('/settings/branding/hero', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
     });
   },
 };
@@ -468,7 +468,7 @@ export const photosApi = {
     formData.append('file', file);
     return api.post(`/patients/${patientId}/photos`, formData, {
       params,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
     });
   },
 
@@ -499,7 +499,7 @@ export const dossierMedicalApi = {
   listAudit: (patientId: number, action?: string) => api.get<MedicalAuditEntry[]>('/audit/medical', { params: { patient_id: patientId, action } }),
   uploadMedicalDocument: (patientId: number, file: File, description?: string) => {
     const form = new FormData(); form.append('file', file); if (description) form.append('description', description);
-    return api.post(`/patients/${patientId}/medical-documents`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post(`/patients/${patientId}/medical-documents`, form, { headers: { 'Content-Type': undefined } });
   },
 
   create: (patientId: number, data: {
@@ -628,8 +628,13 @@ export const scribeIaApi = {
   transcribe: (audioBlob: Blob) => {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
+    // Ne jamais fixer 'multipart/form-data' à la main : sans le paramètre
+    // boundary (que seul le navigateur peut générer), le serveur ne peut pas
+    // parser le corps de la requête. En passant `undefined`, on efface le
+    // Content-Type par défaut ('application/json') du client axios et on
+    // laisse le navigateur poser lui-même l'en-tête complet avec boundary.
     return api.post<{ text: string }>('/scribe-ia/transcribe', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
     });
   },
   process: (patientId: number, transcription: string, dossierId?: number) =>

@@ -60,7 +60,7 @@ async def get_pointage_status(
         .order_by(Pointage.debut.desc())
     )
     current = result.scalar_one_or_none()
-
+    
     return {
         "is_clocked_in": current is not None,
         "current_pointage": current
@@ -113,14 +113,14 @@ async def clock_out(
         .order_by(Pointage.debut.desc())
     )
     current = result.scalar_one_or_none()
-
+    
     if not current:
         raise HTTPException(400, "Aucun pointage en cours trouvé.")
 
     current.fin = datetime.utcnow()
     delta = current.fin - current.debut
     current.duree_minutes = int(delta.total_seconds() / 60)
-
+    
     await db.commit()
     await db.refresh(current)
     return current
@@ -249,9 +249,9 @@ async def get_admin_report(
         .order_by(Pointage.debut.asc())
     )
     pointages = pointages_res.scalars().all()
-
+    
     total_min = sum((p.duree_minutes or 0) for p in pointages)
-
+    
     details = [
         PointageReportItem(
             date=p.debut.date(),
@@ -260,7 +260,7 @@ async def get_admin_report(
             duree_minutes=p.duree_minutes or 0
         ) for p in pointages
     ]
-
+    
     return UserReport(
         utilisateur_id=utilisateur_id,
         nom_complet=f"{target_user.prenom} {target_user.nom}",

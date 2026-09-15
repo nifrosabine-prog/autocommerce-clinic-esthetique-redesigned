@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
@@ -6,7 +7,9 @@ interface SignaturePadProps {
   onCancel: () => void;
 }
 
-export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
+export function SignaturePad({
+  onSave, onCancel }: SignaturePadProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -102,6 +105,7 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
           ref={canvasRef}
           width={500}
           height={200}
+          aria-label={t('componentUi.signatureCanvasLabel')}
           className="w-full bg-white cursor-crosshair"
           onMouseDown={startDrawing}
           onMouseMove={draw}
@@ -118,18 +122,18 @@ export function SignaturePad({ onSave, onCancel }: SignaturePadProps) {
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Faites signer le patient directement ci-dessus (souris ou écran tactile).
+        {t('componentUi.signPrompt')}
       </p>
       <div className="flex justify-between">
         <Button type="button" variant="outline" size="sm" onClick={clear}>
-          Effacer
+          {t('componentUi.clear')}
         </Button>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onCancel}>
-            Annuler
+            {t('componentUi.cancel')}
           </Button>
           <Button type="button" onClick={handleSave} disabled={!hasSignature}>
-            Valider la signature
+            {t('componentUi.validateSignature')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ interface Salle {
 }
 
 export default function RoomsPage() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [salles, setSalles] = useState<Salle[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -44,7 +46,7 @@ export default function RoomsPage() {
       const res = await api.get('/salles');
       setSalles(res.data);
     } catch (err) {
-      toast.error('Erreur lors du chargement des salles');
+      toast.error(t('rooms.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -73,26 +75,26 @@ export default function RoomsPage() {
     try {
       if (editingSalle) {
         await api.patch(`/salles/${editingSalle.id}`, formData);
-        toast.success('Salle mise à jour');
+        toast.success(t('rooms.updated'));
       } else {
         await api.post('/salles', formData);
-        toast.success('Salle créée');
+        toast.success(t('rooms.created'));
       }
       setIsDialogOpen(false);
       loadSalles();
     } catch (err) {
-      toast.error('Erreur lors de la sauvegarde');
+      toast.error(t('rooms.saveError'));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Voulez-vous vraiment supprimer cette salle ?')) return;
+    if (!confirm(t('rooms.confirmDelete'))) return;
     try {
       await api.delete(`/salles/${id}`);
-      toast.success('Salle supprimée');
+      toast.success(t('rooms.deleted'));
       loadSalles();
     } catch (err) {
-      toast.error('Erreur lors de la suppression');
+      toast.error(t('rooms.deleteError'));
     }
   };
 
@@ -101,11 +103,11 @@ export default function RoomsPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Gestion des Salles</h1>
-            <p className="text-muted-foreground mt-1">Organisez vos espaces de consultation et d'opération</p>
+            <h1 className="text-3xl font-bold">{t('rooms.title')}</h1>
+            <p className="text-muted-foreground mt-1">{t('rooms.subtitle')}</p>
           </div>
           <Button onClick={() => handleOpenDialog()}>
-            <Plus className="w-4 h-4 mr-2" /> Nouvelle salle
+            <Plus className="w-4 h-4 mr-2" /> {t('rooms.newRoom')}
           </Button>
         </div>
 
@@ -117,11 +119,11 @@ export default function RoomsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nom</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Statut</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('rooms.nom')}</TableHead>
+                    <TableHead>{t('rooms.type')}</TableHead>
+                    <TableHead>{t('rooms.description')}</TableHead>
+                    <TableHead>{t('rooms.status')}</TableHead>
+                    <TableHead className="text-right">{t('rooms.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -132,7 +134,7 @@ export default function RoomsPage() {
                       <TableCell>{salle.description || '-'}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${salle.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {salle.is_active ? 'Active' : 'Inactive'}
+                          {salle.is_active ? t('rooms.active') : t('rooms.inactive')}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -150,7 +152,7 @@ export default function RoomsPage() {
                   {salles.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                        Aucune salle configurée.
+                        {t('rooms.empty')}
                       </TableCell>
                     </TableRow>
                   )}
@@ -164,36 +166,36 @@ export default function RoomsPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingSalle ? 'Modifier la salle' : 'Nouvelle salle'}</DialogTitle>
-            <DialogDescription>Définissez le nom et le type de l'espace.</DialogDescription>
+            <DialogTitle>{editingSalle ? t('rooms.editTitle') : t('rooms.newTitle')}</DialogTitle>
+            <DialogDescription>{t('rooms.dialogDesc')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="nom">Nom de la salle *</Label>
-              <Input id="nom" value={formData.nom} onChange={(e) => setFormData({...formData, nom: e.target.value})} placeholder="ex: Salle de consultation 1" />
+              <Label htmlFor="nom">{t('rooms.roomName')}</Label>
+              <Input id="nom" value={formData.nom} onChange={(e) => setFormData({...formData, nom: e.target.value})} placeholder={t('rooms.roomNamePh')} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="type">Type d'espace</Label>
+              <Label htmlFor="type">{t('rooms.spaceType')}</Label>
               <select 
                 id="type" 
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 value={formData.type} 
                 onChange={(e) => setFormData({...formData, type: e.target.value})}
               >
-                <option value="consultation">Consultation</option>
-                <option value="operation">Bloc Opératoire</option>
-                <option value="soins">Soins Esthétiques</option>
-                <option value="repos">Salle de Repos</option>
+                <option value="consultation">{t('rooms.typeConsultation')}</option>
+                <option value="operation">{t('rooms.typeOperation')}</option>
+                <option value="soins">{t('rooms.typeSoins')}</option>
+                <option value="repos">{t('rooms.typeRepos')}</option>
               </select>
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
-              <Input id="description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder="Notes optionnelles..." />
+              <Label htmlFor="description">{t('rooms.description')}</Label>
+              <Input id="description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} placeholder={t('rooms.descriptionPh')} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annuler</Button>
-            <Button onClick={handleSave}>Sauvegarder</Button>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>{t('rooms.cancel')}</Button>
+            <Button onClick={handleSave}>{t('rooms.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

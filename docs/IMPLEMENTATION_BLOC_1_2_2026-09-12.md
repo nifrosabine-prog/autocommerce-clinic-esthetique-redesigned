@@ -1,6 +1,6 @@
 # AutoCommerce Clinic — Livraison des blocs 1 et 2
 
-**Date :** 12 septembre 2026
+**Date :** 12 septembre 2026  
 **Statut :** implanté, compilé et vérifié.
 
 ## Périmètre livré

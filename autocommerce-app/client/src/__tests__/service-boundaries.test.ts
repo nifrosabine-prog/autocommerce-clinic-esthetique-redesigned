@@ -33,7 +33,7 @@ describe("services API frontend — contrats métier sensibles", () => {
     await scribeIaApi.process(42, "transcription clinique", 99);
 
     expect(postSpy.mock.calls[0]?.[0]).toBe("/scribe-ia/transcribe");
-    expect(postSpy.mock.calls[0]?.[2]).toMatchObject({ headers: { "Content-Type": "multipart/form-data" } });
+    expect(postSpy.mock.calls[0]?.[2]).toMatchObject({ headers: { "Content-Type": undefined } });
     expect(postSpy).toHaveBeenCalledWith("/scribe-ia/process", {
       patient_id: 42,
       dossier_id: 99,

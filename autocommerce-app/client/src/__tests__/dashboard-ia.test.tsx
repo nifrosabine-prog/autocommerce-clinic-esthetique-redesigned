@@ -39,7 +39,7 @@ describe("DashboardIA — affichage contrôlé des données IA", () => {
 
     expect(await screen.findByText("Dashboard IA")).toBeInTheDocument();
     expect(screen.getByText("Rappeler le patient")).toBeInTheDocument();
-    expect(screen.getByText("high")).toBeInTheDocument();
+    expect(screen.getByText("Élevée")).toBeInTheDocument();
     expect(screen.getByText("Ada Martin")).toBeInTheDocument();
     expect(screen.getByText("Aucun rendez-vous à risque dans les 30 prochains jours.")).toBeInTheDocument();
   });

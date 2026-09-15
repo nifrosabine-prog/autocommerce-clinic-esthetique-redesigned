@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Clock, LogIn, LogOut, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function PointageWidget() {
+  const { t, i18n } = useTranslation();
   const [isLoading, setIsLoading] = useState(true);
   const [isClockedIn, setIsClockedIn] = useState(false);
   const [currentPointage, setCurrentPointage] = useState<any>(null);
@@ -55,9 +57,9 @@ export function PointageWidget() {
       const res = await api.post(`/pointage/${action}`);
       setIsClockedIn(!isClockedIn);
       setCurrentPointage(isClockedIn ? null : res.data);
-      toast.success(isClockedIn ? 'Départ enregistré' : 'Arrivée enregistrée');
+      toast.success(isClockedIn ? t('componentUi.departureRecorded') : t('componentUi.arrivalRecorded'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors du pointage');
+      toast.error(err.response?.data?.detail || t('componentUi.clockError'));
     } finally {
       setIsLoading(false);
     }
@@ -68,19 +70,22 @@ export function PointageWidget() {
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
-          Temps de Présence
+          {t('componentUi.clockedInStatus')}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4">
           <div className="text-center">
-            <p className="text-3xl font-bold font-mono">
+            <p
+              className="text-3xl font-bold font-mono"
+              aria-label={t('componentUi.elapsedTime', { time: isClockedIn ? elapsedTime : '00:00:00' })}
+            >
               {isClockedIn ? elapsedTime : '00:00:00'}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               {isClockedIn 
-                ? `Arrivée à ${new Date(currentPointage?.debut).toLocaleTimeString('fr-TN', { hour: '2-digit', minute: '2-digit' })}`
-                : 'Non pointé'
+                ? t('componentUi.arrivalAt', { time: new Date(currentPointage?.debut).toLocaleTimeString(i18n.resolvedLanguage || i18n.language, { hour: '2-digit', minute: '2-digit' }) })
+                : t('componentUi.notClockedIn')
               }
             </p>
           </div>
@@ -98,7 +103,7 @@ export function PointageWidget() {
             ) : (
               <LogIn className="w-4 h-4 mr-2" />
             )}
-            {isClockedIn ? 'Pointer Départ' : 'Pointer Arrivée'}
+            {isClockedIn ? t('componentUi.clockOut') : t('componentUi.clockIn')}
           </Button>
         </div>
       </CardContent>

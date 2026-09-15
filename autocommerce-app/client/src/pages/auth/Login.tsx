@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ export default function Login() {
   const { login, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { branding } = useBranding();
+  const { t } = useTranslation();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -44,9 +46,9 @@ export default function Login() {
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail;
-      let message = 'Erreur de connexion';
+      let message = t('auth.loginError');
       if (err.response?.status === 429) {
-        message = 'Trop de tentatives. Réessayez dans une minute.';
+        message = t('auth.tooManyAttempts');
       } else if (typeof detail === 'string') {
         message = detail;
       } else if (Array.isArray(detail)) {
@@ -65,25 +67,25 @@ export default function Login() {
           {branding?.logo_url && (
             <img
               src={branding.logo_url}
-              alt="Logo"
+              alt={t('auth.logoAlt')}
               className="h-16 w-16 mx-auto object-contain"
             />
           )}
           <div>
-            <CardTitle className="text-2xl">{branding?.nom_clinique || 'Clinique'}</CardTitle>
-            <CardDescription>Connectez-vous à votre compte</CardDescription>
+            <CardTitle className="text-2xl">{branding?.nom_clinique || t('auth.clinic')}</CardTitle>
+            <CardDescription>{t('auth.loginSubtitle')}</CardDescription>
           </div>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="identifier">Identifiant</Label>
+              <Label htmlFor="identifier">{t('auth.identifier')}</Label>
               <Input
                 id="identifier"
                 type="text"
                 autoComplete="username"
-                placeholder="Votre identifiant"
+                placeholder={t('auth.identifierPlaceholder')}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 disabled={isLoading}
@@ -92,7 +94,7 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
+              <Label htmlFor="password">{t('auth.password')}</Label>
               <Input
                 id="password"
                 type="password"
@@ -118,16 +120,16 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
-                  Connexion en cours...
+                  {t('auth.loggingIn')}
                 </>
               ) : (
-                'Se connecter'
+                t('auth.loginButton')
               )}
             </Button>
           </form>
 
           <p className="text-xs text-muted-foreground text-center mt-4">
-            Données médicales sécurisées • Accès personnel
+            {t('auth.securityFooter')}
           </p>
         </CardContent>
       </Card>

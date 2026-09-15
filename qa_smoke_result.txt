@@ -1,0 +1,5 @@
+admin login OK: {"id":1,"email":"admin.qa@autoclinique.test","nom":"Administrateur","prenom":"Clinique","role":"directrice","telephone":null,"specialite":null}
+medecin login OK: {"id":2,"email":"medecin.qa@autoclinique.test","nom":"Ben Salem","prenom":"Nadia","role":"medecin","telephone":"+21671123456","specialite":"Médecine esthétique"}
+estheticienne login OK: {"id":3,"email":"estheticienne.qa@autoclinique.test","nom":"Esthéticienne","prenom":"Salma","role":"estheticienne","telephone":null,"specialite":"Esthétique"}
+assistante login OK: {"id":4,"email":"assistante.qa@autoclinique.test","nom":"Assistante","prenom":"Amel","role":"assistante","telephone":null,"specialite":"Accueil"}
+frontend public OK

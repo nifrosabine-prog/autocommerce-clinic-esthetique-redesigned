@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.audit_medical import log_access
 from services.timeline_patient_global import get_global_timeline
 from services.clinical_security import require_real_role
+from services.dossier_medical import (
+    _collect_consultations, _collect_prescriptions, _collect_faits_medicaux,
+    _collect_documents,
+)
 
 
 def _role(user: dict) -> str:
@@ -22,12 +26,25 @@ async def export_structured(db: AsyncSession, patient_id: int, user: dict, meta:
     if await require_real_role(db, user, {"medecin"}) != "medecin":
         raise PermissionError("Export médical réservé au médecin")
     entries = await get_global_timeline(db, patient_id, user, meta)
+    clinic_id = int(user["clinic_id"])
+    consultations = await _collect_consultations(db, patient_id, clinic_id)
+    prescriptions = await _collect_prescriptions(db, patient_id, clinic_id)
+    faits_medicaux = await _collect_faits_medicaux(db, patient_id, clinic_id)
+    documents = await _collect_documents(db, patient_id, clinic_id)
     payload = {
         "format": "clinical-core.patient-export.v1",
         "exported_at": datetime.utcnow().isoformat(),
         "patient_id": patient_id,
         "classification": "MEDICAL_SENSITIVE",
         "entries": entries,
+        "consultations": consultations,
+        "prescriptions": prescriptions,
+        "analyses_professionnelles": faits_medicaux,
+        "analyses_radios_documents": documents,
+        "photos": {
+            "included": False,
+            "reason": "Photos cliniques conservées dans l’espace médical sécurisé conformément au RGPD.",
+        },
     }
     await log_access(db, user["id"], patient_id, "EXPORT_STRUCTURED", "patient_export", patient_id, clinic_id=user["clinic_id"], ip_address=meta.get("ip_address"), details={"entries": len(entries), "format": "json"})
     return payload

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { Video, ExternalLink, Clock, FileText, Plus } from 'lucide-react';
 export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
   const [isLoading, setIsLoading] = useState(false);
   const [tcData, setTcData] = useState<any>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (rdvId) {
@@ -23,7 +25,7 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
       const response = await api.get(`/teleconsultation/${rdvId}/lien`);
       setTcData(response.data);
     } catch (err) {
-      // Si pas trouvé, on proposera de la créer
+      // If no existing room is found, the UI offers creation.
       setTcData(null);
     } finally {
       setIsLoading(false);
@@ -36,9 +38,9 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
       setIsLoading(true);
       const response = await api.post('/teleconsultation/creer', { rdv_id: rdvId });
       setTcData(response.data);
-      toast.success('Téléconsultation créée !');
+      toast.success(t('teleconsultation.created'));
     } catch (err) {
-      toast.error('Erreur lors de la création');
+      toast.error(t('teleconsultation.createError'));
     } finally {
       setIsLoading(false);
     }
@@ -49,13 +51,13 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
     try {
       setIsLoading(true);
       await api.post(`/teleconsultation/${tcData.id}/terminer`, {
-        duree: 30, // Exemple
-        notes: "Consultation terminée via interface"
+        duree: 30, // Default duration
+        notes: t('teleconsultation.completionNote')
       });
-      toast.success('Marquée comme terminée');
+      toast.success(t('teleconsultation.completed'));
       loadTeleconsultation();
     } catch (err) {
-      toast.error('Erreur');
+      toast.error(t('teleconsultation.genericError'));
     } finally {
       setIsLoading(false);
     }
@@ -66,8 +68,8 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-96 space-y-4">
           <Video className="w-16 h-16 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Aucun rendez-vous sélectionné</h2>
-          <p className="text-muted-foreground">Veuillez accéder à une téléconsultation depuis l'agenda.</p>
+          <h2 className="text-xl font-semibold">{t('teleconsultation.noAppointmentTitle')}</h2>
+          <p className="text-muted-foreground">{t('teleconsultation.noAppointmentDesc')}</p>
         </div>
       </DashboardLayout>
     );
@@ -79,13 +81,13 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold flex items-center gap-3">
             <Video className="w-8 h-8 text-primary" />
-            Téléconsultation
+            {t('teleconsultation.title')}
           </h1>
           {tcData && (
             <div className={`px-3 py-1 rounded-full text-sm font-medium ${
               tcData.statut === 'terminee' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
             }`}>
-              {tcData.statut.toUpperCase()}
+              {tcData.statut === 'terminee' ? t('teleconsultation.status_completed') : t('teleconsultation.status_active')}
             </div>
           )}
         </div>
@@ -97,14 +99,14 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
                 <Video className="w-8 h-8 text-primary" />
               </div>
               <div className="space-y-2">
-                <CardTitle>Prêt pour la visio ?</CardTitle>
+                <CardTitle>{t('teleconsultation.readyTitle')}</CardTitle>
                 <CardDescription>
-                  Générez un lien sécurisé pour démarrer la consultation avec votre patiente.
+                  {t('teleconsultation.readyDesc')}
                 </CardDescription>
               </div>
               <Button onClick={handleCreate} disabled={isLoading} size="lg">
                 {isLoading ? <Spinner className="mr-2" /> : <Plus className="mr-2 w-4 h-4" />}
-                Générer le lien de téléconsultation
+                {t('teleconsultation.createLink')}
               </Button>
             </CardContent>
           </Card>
@@ -112,8 +114,8 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="md:col-span-2">
               <CardHeader>
-                <CardTitle>Lien de la consultation</CardTitle>
-                <CardDescription>Cliquez sur le bouton ci-dessous pour ouvrir la salle virtuelle Jitsi.</CardDescription>
+                <CardTitle>{t('teleconsultation.consultationLinkTitle')}</CardTitle>
+                <CardDescription>{t('teleconsultation.consultationLinkDesc')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="p-4 bg-muted rounded-lg font-mono text-sm break-all">
@@ -123,12 +125,12 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
                   <Button asChild className="flex-1" size="lg">
                     <a href={tcData.lien_visio} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="mr-2 w-4 h-4" />
-                      Rejoindre la visio
+                      {t('teleconsultation.join')}
                     </a>
                   </Button>
                   {tcData.statut !== 'terminee' && (
                     <Button variant="outline" onClick={handleComplete} disabled={isLoading}>
-                      Marquer terminée
+                      {t('teleconsultation.markCompleted')}
                     </Button>
                   )}
                 </div>
@@ -139,16 +141,16 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Clock className="w-4 h-4" /> Détails
+                    <Clock className="w-4 h-4" /> {t('teleconsultation.details')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm space-y-2">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>RDV ID</span>
+                    <span>{t('teleconsultation.appointmentId')}</span>
                     <span className="text-foreground">#{rdvId}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Plateforme</span>
+                    <span>{t('teleconsultation.platform')}</span>
                     <span className="text-foreground">Jitsi Meet</span>
                   </div>
                 </CardContent>
@@ -157,13 +159,13 @@ export default function TeleconsultationPage({ rdvId }: { rdvId?: number }) {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <FileText className="w-4 h-4" /> Notes
+                    <FileText className="w-4 h-4" /> {t('teleconsultation.notes')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <textarea 
                     className="w-full min-h-[100px] p-2 text-sm border rounded-md"
-                    placeholder="Saisissez vos notes ici..."
+                    placeholder={t('teleconsultation.notesPlaceholder')}
                   ></textarea>
                 </CardContent>
               </Card>

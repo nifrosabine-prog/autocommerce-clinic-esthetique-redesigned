@@ -25,6 +25,7 @@ import { ConsommablesList } from '@/components/stock/ConsommablesList';
 import { ConsommableForm } from '@/components/stock/ConsommableForm';
 import { BarcodeCameraScanner } from '@/components/stock/BarcodeCameraScanner';
 import { extractErrorMessage, parseDecimalInput } from '@/lib/errors';
+import { useTranslation } from 'react-i18next';
 
 interface StockProduct {
   produit_id: number;
@@ -52,7 +53,16 @@ interface StockReminder {
   message: string;
 }
 
+const INJECTION_TYPE_OPTIONS = [
+  { value: 'Botox', label: 'Botox' },
+  { value: 'Hyaluronic Acid', labelKey: 'stock.injection.typeHyaluronicAcid' },
+  { value: 'Mesotherapy', labelKey: 'stock.injection.typeMesotherapy' },
+  { value: 'Skinbooster', label: 'Skinbooster' },
+  { value: 'Other', labelKey: 'stock.injection.typeOther' },
+] as const;
+
 export default function StockPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currentRole = user?.role || '';
   const canManageStock = ['admin', 'directrice', 'assistante'].includes(currentRole);
@@ -92,8 +102,8 @@ export default function StockPage() {
       setLoadError(null);
     } catch (err: any) {
       console.error('Failed to load stock:', err);
-      setLoadError("Erreur lors du chargement du stock — vérifiez la connexion");
-      toast.error('Erreur lors du chargement du stock');
+      setLoadError(t('stock.loadError'));
+      toast.error(t('stock.loadErrorShort'));
     } finally {
       setIsLoading(false);
     }
@@ -103,9 +113,9 @@ export default function StockPage() {
     try {
       const filename = `registre_mouvements_injectables_${new Date().toISOString().slice(0, 10)}.pdf`;
       await downloadPdf('/injectables/mouvements/export-pdf', filename);
-      toast.success('Export PDF du registre généré');
+      toast.success(t('stock.exportSuccess'));
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de l'export PDF du registre"));
+      toast.error(extractErrorMessage(err, t('stock.exportError')));
     }
   };
 
@@ -113,9 +123,9 @@ export default function StockPage() {
     try {
       await api.post(`/stock-alertes/${id}/acquitter`);
       setStockReminders((current) => current.filter((item) => item.id !== id));
-      toast.success('Rappel acquitté');
+      toast.success(t('stock.reminderAcknowledged'));
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Impossible d'acquitter le rappel"));
+      toast.error(extractErrorMessage(err, t('stock.reminderAckError')));
     }
   };
 
@@ -129,11 +139,11 @@ export default function StockPage() {
       else setInjectionDialogOpen(true);
       return true;
     } catch (err) {
-      const message = extractErrorMessage(err, 'Lot non trouvé');
+      const message = extractErrorMessage(err, t('stock.lotNotFound'));
       if (normalized.length >= 3 && /non trouvé|404/i.test(message)) {
         setAddLotInitialCode(normalized);
         setAddLotOpen(true);
-        toast.info('Lot inconnu — complétez le formulaire pour le créer');
+        toast.info(t('stock.unknownLotInfo'));
       } else {
         toast.error(message);
       }
@@ -144,7 +154,7 @@ export default function StockPage() {
   const submitManualScan = async () => {
     const code = scanValue.trim();
     if (code.length < 3) {
-      toast.error('Saisissez au moins 3 caractères');
+      toast.error(t('stock.minCharsError'));
       return;
     }
     if (await handleScan(code)) setScanValue('');
@@ -162,14 +172,8 @@ export default function StockPage() {
   };
 
   const getStatusLabel = (statut: string) => {
-    switch (statut) {
-      case 'rupture':
-        return 'RUPTURE';
-      case 'alerte':
-        return 'ALERTE';
-      default:
-        return 'OK';
-    }
+    const key = ['rupture', 'alerte', 'ok'].includes(statut) ? statut : 'ok';
+    return t(`stock.status_${key}`, { defaultValue: statut });
   };
 
   const totalAlertesCritiques = alertes.rouge.length + alertes.orange.length;
@@ -183,12 +187,12 @@ export default function StockPage() {
               <div className="flex items-center gap-3 text-red-800">
                 <AlertCircle className="w-5 h-5 shrink-0" />
                 <div>
-                  <p className="font-medium">Impossible de charger le stock</p>
+                  <p className="font-medium">{t('stock.loadErrorTitle')}</p>
                   <p className="text-sm text-red-700">{loadError}</p>
                 </div>
               </div>
               <Button variant="outline" onClick={() => void loadStockData()}>
-                <RefreshCw className="w-4 h-4 mr-2" /> Réessayer
+                <RefreshCw className="w-4 h-4 mr-2" /> {t('stock.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -212,8 +216,8 @@ export default function StockPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Gestion des Stocks</h1>
-            <p className="text-muted-foreground mt-1">Suivi des injectables et consommables</p>
+            <h1 className="text-3xl font-bold">{t('stock.title')}</h1>
+            <p className="text-muted-foreground mt-1">{t('stock.subtitle')}</p>
           </div>
         </div>
 
@@ -221,7 +225,7 @@ export default function StockPage() {
           <Card className="border-orange-300 bg-orange-50/70">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-orange-900">
-                <BellRing className="w-5 h-5" /> Rappels de seuil ({stockReminders.length})
+                <BellRing className="w-5 h-5" /> {t('stock.remindersTitle', { count: stockReminders.length })}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -229,12 +233,12 @@ export default function StockPage() {
                 <div key={reminder.id} className="flex items-center justify-between gap-3 rounded border border-orange-200 bg-white p-2 text-sm">
                   <div>
                     <span className={`mr-2 inline-block rounded px-2 py-0.5 text-xs font-semibold ${reminder.niveau === 'critique' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'}`}>
-                      {reminder.niveau === 'critique' ? 'CRITIQUE' : 'ALERTE'}
+                      {t(`stock.reminderLevel_${reminder.niveau === 'critique' ? 'critique' : 'alerte'}`)}
                     </span>
                     <span className="font-medium">{reminder.article_nom}</span>
                     <span className="ml-2 text-muted-foreground">({reminder.type_article}) — {reminder.message}</span>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => void acknowledgeReminder(reminder.id)}>Acquitter</Button>
+                  <Button size="sm" variant="outline" onClick={() => void acknowledgeReminder(reminder.id)}>{t('stock.acknowledge')}</Button>
                 </div>
               ))}
             </CardContent>
@@ -243,8 +247,8 @@ export default function StockPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="injectables">Injectables</TabsTrigger>
-            <TabsTrigger value="consommables">Consommables</TabsTrigger>
+            <TabsTrigger value="injectables">{t('stock.injectablesTab')}</TabsTrigger>
+            <TabsTrigger value="consommables">{t('stock.consommablesTab')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="injectables" className="space-y-6">
@@ -252,7 +256,7 @@ export default function StockPage() {
               <div className="flex justify-end">
                 <Button onClick={() => setAddLotOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Ajouter un lot
+                  {t('stock.addLot')}
                 </Button>
               </div>
             )}
@@ -263,7 +267,7 @@ export default function StockPage() {
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-destructive" />
                 <span className="font-semibold text-destructive">
-                  {alertes.rouge.length} alerte(s) rouge(s) — {alertes.orange.length} alerte(s) orange(s)
+                  {t('stock.alertsSummary', { red: alertes.rouge.length, orange: alertes.orange.length })}
                 </span>
               </div>
             </CardContent>
@@ -272,7 +276,7 @@ export default function StockPage() {
 
             {canManageStock && <Card>
               <CardHeader>
-                <CardTitle>Scan</CardTitle>
+                <CardTitle>{t('stock.scanCardTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <input
@@ -299,7 +303,7 @@ export default function StockPage() {
               </div>
               <div className="flex flex-1 sm:max-w-sm gap-2">
                 <Input
-                  placeholder="Saisie manuelle..."
+                  placeholder={t('stock.scanPlaceholder')}
                   value={scanValue}
                   onChange={(e) => setScanValue(e.target.value)}
                   onKeyDown={(e) => {
@@ -313,7 +317,7 @@ export default function StockPage() {
                   className="min-w-0"
                 />
                 <Button type="button" variant="outline" onClick={() => void submitManualScan()} disabled={scanValue.trim().length < 3}>
-                  <Search className="w-4 h-4 mr-1" /> Rechercher
+                  <Search className="w-4 h-4 mr-1" /> {t('stock.searchButton')}
                 </Button>
               </div>
             </div>
@@ -322,7 +326,7 @@ export default function StockPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Stock par produit</CardTitle>
+                <CardTitle>{t('stock.stockByProduct')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {stockData?.produits ? (
@@ -330,12 +334,12 @@ export default function StockPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Produit</TableHead>
-                          <TableHead>Catégorie</TableHead>
-                          <TableHead>Stock</TableHead>
-                          <TableHead>Minimum</TableHead>
-                          <TableHead>Lots</TableHead>
-                          <TableHead>Statut</TableHead>
+                          <TableHead>{t('stock.product')}</TableHead>
+                          <TableHead>{t('stock.category')}</TableHead>
+                          <TableHead>{t('stock.stockColumn')}</TableHead>
+                          <TableHead>{t('stock.minimum')}</TableHead>
+                          <TableHead>{t('stock.lots')}</TableHead>
+                          <TableHead>{t('stock.status')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -359,7 +363,7 @@ export default function StockPage() {
                     </Table>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">Aucun produit trouvé</p>
+                  <p className="text-muted-foreground">{t('stock.noProductFound')}</p>
                 )}
               </CardContent>
             </Card>
@@ -369,12 +373,12 @@ export default function StockPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
-                      <History className="w-4 h-4" /> Mouvements récents
+                      <History className="w-4 h-4" /> {t('stock.recentMovements')}
                     </CardTitle>
                     {canManageStock && (
-                      <Button size="sm" variant="outline" onClick={exportMouvementsPdf} title="Exporter le registre en PDF (audit imprimable)">
+                      <Button size="sm" variant="outline" onClick={exportMouvementsPdf} title={t('stock.exportPdfTitle')}>
                         <FileDown className="w-4 h-4 mr-2" />
-                        Exporter PDF
+                        {t('stock.exportPdf')}
                       </Button>
                     )}
                   </div>
@@ -384,21 +388,21 @@ export default function StockPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Produit / Lot</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Quantité</TableHead>
-                          <TableHead>Réf.</TableHead>
-                          <TableHead>Motif</TableHead>
+                          <TableHead>{t('stock.date')}</TableHead>
+                          <TableHead>{t('stock.productLot')}</TableHead>
+                          <TableHead>{t('stock.type')}</TableHead>
+                          <TableHead>{t('stock.quantity')}</TableHead>
+                          <TableHead>{t('stock.ref')}</TableHead>
+                          <TableHead>{t('stock.reason')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {mouvements.map((m) => (
                           <TableRow key={m.mouvement_id}>
-                            <TableCell className="whitespace-nowrap">{new Date(m.date_mouvement).toLocaleString('fr-FR')}</TableCell>
+                            <TableCell className="whitespace-nowrap">{new Date(m.date_mouvement).toLocaleString(i18n.language)}</TableCell>
                             <TableCell>
                               <span className="font-medium">{m.produit_nom}</span>
-                              <span className="text-muted-foreground text-xs block">Lot {m.numero_lot}</span>
+                              <span className="text-muted-foreground text-xs block">{t('stock.lotNumber', { lot: m.numero_lot })}</span>
                             </TableCell>
                             <TableCell>
                               <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
@@ -406,7 +410,7 @@ export default function StockPage() {
                                 m.type_mouvement === 'injection' ? 'bg-blue-100 text-blue-800' :
                                 'bg-orange-100 text-orange-800'
                               }`}>
-                                {m.type_mouvement === 'reception' ? 'Réception' : m.type_mouvement === 'injection' ? 'Injection' : 'Ajustement'}
+                                {t(`stock.mvt_${['reception', 'injection', 'ajustement'].includes(m.type_mouvement) ? m.type_mouvement : 'ajustement'}`, { defaultValue: m.type_mouvement })}
                               </span>
                             </TableCell>
                             <TableCell className={m.quantite > 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
@@ -438,13 +442,13 @@ export default function StockPage() {
         onCreated={() => { setAddLotInitialCode(''); loadStockData(); }}
       />
 
-      {canManageStock && <ConsommableForm
+      {canManageStock && <ConsommableForm 
         open={addConsommableOpen}
         onOpenChange={setAddConsommableOpen}
         onCreated={() => {
-          // Le composant ConsommablesList se rafraîchira via son propre useEffect ou un signal
-          // Pour forcer le rafraîchissement si nécessaire, on pourrait passer une prop key ou un callback
-          window.location.reload(); // Solution simple pour garantir le rafraîchissement global
+          // The ConsommablesList component refreshes through its own lifecycle or a signal.
+          // A dedicated callback or refresh key would be cleaner if this flow evolves.
+          window.location.reload(); // Simple fallback to guarantee a full refresh.
         }}
       />}
 
@@ -473,6 +477,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
   lot: any;
   onSuccess: () => void;
 }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const currentRole = user?.role || '';
   const canChoosePraticien = ['directrice', 'assistante', 'admin'].includes(currentRole);
@@ -530,7 +535,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
       });
     } catch (err) {
       console.error('Failed to load practitioners:', err);
-      toast.error('Impossible de charger la liste des médecins');
+      toast.error(t('stock.injection.loadDoctorsError'));
     }
   };
 
@@ -542,12 +547,12 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatientId || !quantite || !praticienId) {
-      toast.error('Merci de remplir les champs obligatoires');
+      toast.error(t('stock.injection.requiredFieldsError'));
       return;
     }
     const qty = parseDecimalInput(quantite);
     if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error('Quantité invalide (ex. 2.5 ou 2,5)');
+      toast.error(t('stock.injection.invalidQuantityError'));
       return;
     }
 
@@ -564,11 +569,11 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
         date_injection: dateInjection ? `${dateInjection}T12:00:00` : undefined,
         notes: notes || undefined,
       });
-      toast.success('Injection enregistrée');
+      toast.success(t('stock.injection.savedSuccess'));
       onOpenChange(false);
       onSuccess();
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de l'enregistrement"));
+      toast.error(extractErrorMessage(err, t('stock.injection.saveError')));
     } finally {
       setIsSaving(false);
     }
@@ -580,21 +585,21 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Enregistrer une injection</DialogTitle>
+          <DialogTitle>{t('stock.injection.title')}</DialogTitle>
           <DialogDescription>
-            Produit : <span className="font-bold text-foreground">{lot.produit_nom}</span> (Lot: {lot.numero_lot})
+            {t('stock.injection.productLotLine', { product: lot.produit_nom, lot: lot.numero_lot })}
             <br />
-            Stock disponible : {lot.quantite_restante} {lot.unite}
+            {t('stock.injection.availableStock', { qty: lot.quantite_restante, unit: lot.unite })}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Patient *</Label>
+              <Label>{t('stock.injection.patientLabel')}</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Rechercher..."
+                  placeholder={t('stock.injection.searchPatientPlaceholder')}
                   value={patientSearch}
                   onChange={(e) => setPatientSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearchPatient(e)}
@@ -608,7 +613,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
                 value={selectedPatientId}
                 onChange={(e) => setSelectedPatientId(e.target.value)}
               >
-                <option value="">Choisir un patient...</option>
+                <option value="">{t('stock.injection.choosePatient')}</option>
                 {patients.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nom} {p.prenom} ({p.telephone})
@@ -618,24 +623,24 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="type_injection">Type d'injection</Label>
+              <Label htmlFor="type_injection">{t('stock.injection.injectionTypeLabel')}</Label>
               <select
                 id="type_injection"
                 className="w-full h-9 px-3 border rounded-md text-sm"
                 value={typeInjection}
                 onChange={(e) => setTypeInjection(e.target.value)}
               >
-                <option value="">Non spécifié</option>
-                <option value="Botox">Botox</option>
-                <option value="Acide Hyaluronique">Acide Hyaluronique</option>
-                <option value="Mésothérapie">Mésothérapie</option>
-                <option value="Skinbooster">Skinbooster</option>
-                <option value="Autre">Autre</option>
+                <option value="">{t('stock.injection.notSpecified')}</option>
+                {INJECTION_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {'labelKey' in option ? t(option.labelKey) : option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quantite">Quantité injectée ({lot.unite}) *</Label>
+              <Label htmlFor="quantite">{t('stock.injection.quantityInjected', { unit: lot.unite })}</Label>
               <Input
                 id="quantite"
                 type="number"
@@ -647,7 +652,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="date_injection">Date de l'injection *</Label>
+              <Label htmlFor="date_injection">{t('stock.injection.injectionDateLabel')}</Label>
               <Input
                 id="date_injection"
                 type="date"
@@ -657,7 +662,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
             </div>
 
             <div className="space-y-2">
-                  <Label htmlFor="praticien">Médecin *</Label>
+                  <Label htmlFor="praticien">{t('stock.injection.doctorLabel')}</Label>
               {canChoosePraticien ? (
                 <select
                   id="praticien"
@@ -665,7 +670,7 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
                   value={praticienId}
                   onChange={(e) => setPraticienId(e.target.value)}
                 >
-                  <option value="">Choisir un médecin...</option>
+                  <option value="">{t('stock.injection.chooseDoctor')}</option>
                   {praticiens.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.nom_complet}
@@ -686,22 +691,22 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Notes / Observations</Label>
+            <Label htmlFor="notes">{t('stock.injection.notesLabel')}</Label>
             <Input
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notes optionnelles..."
+              placeholder={t('stock.injection.notesPlaceholder')}
             />
           </div>
 
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={isSaving}>
               {isSaving ? <Spinner className="h-4 w-4 mr-2" /> : null}
-              Enregistrer l'utilisation
+              {t('stock.injection.saveUsage')}
             </Button>
           </DialogFooter>
         </form>
@@ -715,12 +720,13 @@ function InjectionUsageDialog({ open, onOpenChange, lot, onSuccess }: {
 function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated }: {
   open: boolean; onOpenChange: (v: boolean) => void; produits: StockProduct[]; initialLotCode?: string; onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [produitId, setProduitId] = useState('');
   const [catalogue, setCatalogue] = useState<StockProduct[]>(produits);
   const [showProductForm, setShowProductForm] = useState(false);
   const [newProductNom, setNewProductNom] = useState('');
   const [newProductCategorie, setNewProductCategorie] = useState('toxine');
-  const [newProductUnite, setNewProductUnite] = useState('unité');
+  const [newProductUnite, setNewProductUnite] = useState('unit');
   const [newProductFabricant, setNewProductFabricant] = useState('');
   const [numeroLot, setNumeroLot] = useState('');
   const [dateExpiration, setDateExpiration] = useState('');
@@ -736,7 +742,7 @@ function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated 
       setCatalogue(produits);
       setShowProductForm(produits.length === 0);
       api.get('/injectables/produits').then((res) => {
-        const list = Array.isArray(res.data) ? res.data.map((p: any) => ({ ...p, produit_id: p.id, stock_total: 0, stock_minimum: 0, nb_lots_actifs: 0, statut: 'ok', unite: p.unite || 'unité' })) : [];
+        const list = Array.isArray(res.data) ? res.data.map((p: any) => ({ ...p, produit_id: p.id, stock_total: 0, stock_minimum: 0, nb_lots_actifs: 0, statut: 'ok', unite: p.unite || 'unit' })) : [];
         setCatalogue(list);
         setShowProductForm(list.length === 0);
       }).catch(() => setCatalogue(produits));
@@ -744,7 +750,7 @@ function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated 
   }, [open, produits, initialLotCode]);
 
   const handleCreateProduct = async () => {
-    if (!newProductNom.trim()) { toast.error('Le nom du produit est requis'); return; }
+    if (!newProductNom.trim()) { toast.error(t('stock.addLotDialog.productNameRequired')); return; }
     try {
       const res = await api.post('/injectables/produits', {
         nom: newProductNom.trim(), categorie: newProductCategorie, unite: newProductUnite,
@@ -754,26 +760,26 @@ function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated 
       setCatalogue((current) => [...current, created]);
       setProduitId(String(created.produit_id));
       setNewProductNom(''); setNewProductFabricant(''); setShowProductForm(false);
-      toast.success('Produit injectable ajouté');
-    } catch (err) { toast.error(extractErrorMessage(err, "Erreur lors de l'ajout du produit")); }
+      toast.success(t('stock.addLotDialog.productAddedSuccess'));
+    } catch (err) { toast.error(extractErrorMessage(err, t('stock.addLotDialog.productAddError'))); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!produitId || !numeroLot.trim() || !dateExpiration) {
-      toast.error('Merci de compléter les champs requis');
+      toast.error(t('stock.addLotDialog.requiredFieldsError'));
       return;
     }
     const quantite = parseDecimalInput(quantiteInitiale);
     if (!Number.isFinite(quantite) || quantite <= 0) {
-      toast.error('Quantité initiale invalide (ex. 2.5 ou 2,5)');
+      toast.error(t('stock.addLotDialog.invalidInitialQtyError'));
       return;
     }
     let prix: number | undefined;
     if (prixAchat.trim()) {
       prix = parseDecimalInput(prixAchat);
       if (!Number.isFinite(prix) || prix < 0) {
-        toast.error('Prix d’achat invalide');
+        toast.error(t('stock.addLotDialog.invalidPriceError'));
         return;
       }
     }
@@ -787,11 +793,11 @@ function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated 
         fournisseur: fournisseur || undefined,
         prix_achat_lot: prix,
       });
-      toast.success('Lot ajouté');
+      toast.success(t('stock.addLotDialog.lotAddedSuccess'));
       onOpenChange(false);
       onCreated();
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de l'ajout du lot"));
+      toast.error(extractErrorMessage(err, t('stock.addLotDialog.lotAddError')));
     } finally {
       setIsSaving(false);
     }
@@ -801,45 +807,45 @@ function AddLotDialog({ open, onOpenChange, produits, initialLotCode, onCreated 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Ajouter un lot</DialogTitle>
-          <DialogDescription>Un QR/code-barres sera généré automatiquement pour ce lot.</DialogDescription>
+          <DialogTitle>{t('stock.addLotDialog.title')}</DialogTitle>
+          <DialogDescription>{t('stock.addLotDialog.description')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <div className="flex items-center justify-between"><Label htmlFor="produit">Produit *</Label><Button type="button" variant="outline" size="sm" onClick={() => setShowProductForm((v) => !v)}>{showProductForm ? 'Masquer' : 'Nouveau produit'}</Button></div>
+            <div className="flex items-center justify-between"><Label htmlFor="produit">{t('stock.addLotDialog.productLabel')}</Label><Button type="button" variant="outline" size="sm" onClick={() => setShowProductForm((v) => !v)}>{showProductForm ? t('stock.addLotDialog.hide') : t('stock.addLotDialog.newProduct')}</Button></div>
             <select id="produit" value={produitId} onChange={(e) => setProduitId(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-              <option value="">{catalogue.length ? 'Sélectionner un produit' : 'Aucun produit — créez-en un ci-dessous'}</option>
+              <option value="">{catalogue.length ? t('stock.addLotDialog.selectProduct') : t('stock.addLotDialog.noProductCreateBelow')}</option>
               {catalogue.map((p) => <option key={p.produit_id} value={p.produit_id}>{p.nom}{p.fabricant ? ` — ${p.fabricant}` : ''}</option>)}
             </select>
-            {showProductForm && <div className="rounded-md border bg-muted/30 p-3 space-y-2"><p className="text-sm font-medium">Créer un produit injectable</p><Input placeholder="Nom du produit *" value={newProductNom} onChange={(e) => setNewProductNom(e.target.value)} /><div className="grid grid-cols-2 gap-2"><Input placeholder="Catégorie" value={newProductCategorie} onChange={(e) => setNewProductCategorie(e.target.value)} /><Input placeholder="Unité" value={newProductUnite} onChange={(e) => setNewProductUnite(e.target.value)} /></div><Input placeholder="Fabricant (facultatif)" value={newProductFabricant} onChange={(e) => setNewProductFabricant(e.target.value)} /><Button type="button" size="sm" onClick={handleCreateProduct}>Créer et sélectionner</Button></div>}
+            {showProductForm && <div className="rounded-md border bg-muted/30 p-3 space-y-2"><p className="text-sm font-medium">{t('stock.addLotDialog.createInjectableTitle')}</p><Input placeholder={t('stock.addLotDialog.productNamePlaceholder')} value={newProductNom} onChange={(e) => setNewProductNom(e.target.value)} /><div className="grid grid-cols-2 gap-2"><Input placeholder={t('stock.addLotDialog.categoryPlaceholder')} value={newProductCategorie} onChange={(e) => setNewProductCategorie(e.target.value)} /><Input placeholder={t('stock.addLotDialog.unitPlaceholder')} value={newProductUnite} onChange={(e) => setNewProductUnite(e.target.value)} /></div><Input placeholder={t('stock.addLotDialog.manufacturerPlaceholder')} value={newProductFabricant} onChange={(e) => setNewProductFabricant(e.target.value)} /><Button type="button" size="sm" onClick={handleCreateProduct}>{t('stock.addLotDialog.createAndSelect')}</Button></div>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="numero_lot">Numéro de lot *</Label>
+              <Label htmlFor="numero_lot">{t('stock.addLotDialog.lotNumberLabel')}</Label>
               <Input id="numero_lot" value={numeroLot} onChange={(e) => setNumeroLot(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="date_expiration">Date d'expiration *</Label>
+              <Label htmlFor="date_expiration">{t('stock.addLotDialog.expiryLabel')}</Label>
               <Input id="date_expiration" type="date" value={dateExpiration} onChange={(e) => setDateExpiration(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="quantite">Quantité initiale *</Label>
+              <Label htmlFor="quantite">{t('stock.addLotDialog.initialQtyLabel')}</Label>
               <Input id="quantite" type="number" step="0.001" value={quantiteInitiale} onChange={(e) => setQuantiteInitiale(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="prix_achat">Prix d'achat (DT)</Label>
+              <Label htmlFor="prix_achat">{t('stock.addLotDialog.purchasePriceLabel')}</Label>
               <Input id="prix_achat" type="number" step="0.001" value={prixAchat} onChange={(e) => setPrixAchat(e.target.value)} />
             </div>
           </div>
           <div>
-            <Label htmlFor="fournisseur">Fournisseur</Label>
+            <Label htmlFor="fournisseur">{t('stock.addLotDialog.supplierLabel')}</Label>
             <Input id="fournisseur" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : 'Ajouter'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? <Spinner className="h-4 w-4" /> : t('stock.addLotDialog.submit')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -855,6 +861,7 @@ function LotReceptionDialog({ open, onOpenChange, lot, onSuccess }: {
   lot: any;
   onSuccess: () => void;
 }) {
+  const { t } = useTranslation();
   const [quantite, setQuantite] = useState('');
   const [dateExpiration, setDateExpiration] = useState('');
   const [fournisseur, setFournisseur] = useState('');
@@ -879,7 +886,7 @@ function LotReceptionDialog({ open, onOpenChange, lot, onSuccess }: {
     if (!lot) return;
     const qty = parseDecimalInput(quantite);
     if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error('Quantité invalide (ex. 2.5 ou 2,5)');
+      toast.error(t('stock.reception.invalidQuantityError'));
       return;
     }
     setIsSaving(true);
@@ -894,11 +901,11 @@ function LotReceptionDialog({ open, onOpenChange, lot, onSuccess }: {
         motif: motif || undefined,
         reference: reference || undefined,
       });
-      toast.success('Réception enregistrée — stock crédité');
+      toast.success(t('stock.reception.savedSuccess'));
       onOpenChange(false);
       onSuccess();
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Erreur lors de la réception"));
+      toast.error(extractErrorMessage(err, t('stock.reception.saveError')));
     } finally {
       setIsSaving(false);
     }
@@ -910,47 +917,47 @@ function LotReceptionDialog({ open, onOpenChange, lot, onSuccess }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Ajouter du stock / Réception</DialogTitle>
+          <DialogTitle>{t('stock.reception.title')}</DialogTitle>
           <DialogDescription>
-            Produit : <span className="font-bold text-foreground">{lot.produit_nom}</span> (Lot: {lot.numero_lot})
+            {t('stock.reception.productLotLine', { product: lot.produit_nom, lot: lot.numero_lot })}
             <br />
-            Stock actuel : {lot.quantite_restante} {lot.unite}
+            {t('stock.reception.currentStock', { qty: lot.quantite_restante, unit: lot.unite })}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="qte_recue">Quantité reçue ({lot.unite}) *</Label>
+              <Label htmlFor="qte_recue">{t('stock.reception.quantityReceived', { unit: lot.unite })}</Label>
               <Input id="qte_recue" type="number" step="0.001" placeholder="0.000" value={quantite} onChange={(e) => setQuantite(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="date_exp">Date d'expiration</Label>
+              <Label htmlFor="date_exp">{t('stock.reception.expiryLabel')}</Label>
               <Input id="date_exp" type="date" value={dateExpiration} onChange={(e) => setDateExpiration(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fournisseur">Fournisseur</Label>
-              <Input id="fournisseur" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} placeholder="Nom du fournisseur" />
+              <Label htmlFor="fournisseur">{t('stock.reception.supplierLabel')}</Label>
+              <Input id="fournisseur" value={fournisseur} onChange={(e) => setFournisseur(e.target.value)} placeholder={t('stock.reception.supplierPlaceholder')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="prix">Prix d'achat (DT)</Label>
+              <Label htmlFor="prix">{t('stock.reception.purchasePriceLabel')}</Label>
               <Input id="prix" type="number" step="0.001" value={prixAchat} onChange={(e) => setPrixAchat(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="reference">N° bon de livraison</Label>
-              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Ex: BL-2026-0142" />
+              <Label htmlFor="reference">{t('stock.reception.deliveryNoteLabel')}</Label>
+              <Input id="reference" value={reference} onChange={(e) => setReference(e.target.value)} placeholder={t('stock.reception.deliveryNotePlaceholder')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="motif">Motif</Label>
-              <Input id="motif" value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Ex: Nouvelle livraison" />
+              <Label htmlFor="motif">{t('stock.reception.reasonLabel')}</Label>
+              <Input id="motif" value={motif} onChange={(e) => setMotif(e.target.value)} placeholder={t('stock.reception.reasonPlaceholder')} />
             </div>
           </div>
 
           <DialogFooter className="pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isSaving}>
               {isSaving ? <Spinner className="h-4 w-4 mr-2" /> : null}
-              Enregistrer la réception
+              {t('stock.reception.saveReception')}
             </Button>
           </DialogFooter>
         </form>

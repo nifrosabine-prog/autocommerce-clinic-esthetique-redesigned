@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { FileText, Image as ImageIcon, CheckCircle, Download, Plus, Trash2, User, Phone, ArrowLeft, Sparkles, Camera, SlidersHorizontal, Eye, EyeOff, Zap, Mic, Square, Loader2, Pencil, ExternalLink, Save, HeartPulse, Pill } from 'lucide-react';
+import { FileText, Image as ImageIcon, CheckCircle, Download, Plus, Trash2, User, Phone, ArrowLeft, Sparkles, Camera, SlidersHorizontal, Eye, EyeOff, Zap, Mic, Square, Loader2, Pencil, ExternalLink, Save, HeartPulse, Pill, FlaskConical, Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import { api, dossierMedicalApi, medicalFactsApi, prescriptionsApi, photosApi, scribeIaApi, type MedicalFactItem, type PrescriptionItem } from '@/lib/api';
@@ -84,13 +85,13 @@ interface Acte {
 
 /** Bloc B — libellés métier des types de faits médicaux structurés. */
 const FACT_TYPE_LABELS: Record<string, string> = {
-  antecedent_medical: 'Antécédent médical',
-  antecedent_chirurgical: 'Antécédent chirurgical',
-  antecedent_anesthesique: 'Antécédent anesthésique',
-  antecedent_familial: 'Antécédent familial',
-  allergie: 'Allergie',
-  traitement: 'Traitement',
-  contre_indication: 'Contre-indication',
+  antecedent_medical: 'medicalFile.factTypeAntecedentMedical',
+  antecedent_chirurgical: 'medicalFile.factTypeAntecedentChirurgical',
+  antecedent_anesthesique: 'medicalFile.factTypeAntecedentAnesthesique',
+  antecedent_familial: 'medicalFile.factTypeAntecedentFamilial',
+  allergie: 'medicalFile.factTypeAllergie',
+  traitement: 'medicalFile.factTypeTraitement',
+  contre_indication: 'medicalFile.factTypeContreIndication',
 };
 
 /** Interface pour la réponse de comparaison avant/après */
@@ -100,6 +101,7 @@ interface ComparaisonAvantApres {
 }
 
 export default function MedicalFile({ patientId }: { patientId: number }) {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const backToPatientIndex = location.startsWith('/medical-record') ? '/medical-record' : '/patients';
@@ -162,7 +164,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
       ]);
 
       if (patientRes.status === 'fulfilled') setPatient(patientRes.value.data);
-      else toast.error("Impossible de charger la fiche patient");
+      else toast.error(t('medicalFile.loadPatientError'));
 
       if (timelineRes.status === 'fulfilled') setTimeline(timelineRes.value.data);
       if (consentRes.status === 'fulfilled') setConsentements(consentRes.value.data);
@@ -190,9 +192,9 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
         date_naissance: intake.date_naissance || undefined,
       });
       setPatient(response.data);
-      toast.success('Dossier patient enregistré avec succès');
+      toast.success(t('medicalFile.intakeSaved'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Impossible d’enregistrer le dossier patient');
+      toast.error(err.response?.data?.detail || t('medicalFile.intakeSaveError'));
     } finally {
       setIsSavingIntake(false);
     }
@@ -225,7 +227,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
     try {
       await dossierMedicalApi.openConsentement(patientId, consentementId);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Document signé indisponible');
+      toast.error(err.response?.data?.detail || t('medicalFile.consentDocUnavailable'));
     }
   };
 
@@ -234,7 +236,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
     try {
       await dossierMedicalApi.downloadExportPdf(patientId);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'export PDF");
+      toast.error(err.response?.data?.detail || t('medicalFile.pdfExportError'));
     } finally {
       setIsExporting(false);
     }
@@ -248,17 +250,17 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
       const link = document.createElement('a');
       link.href = url; link.download = `dossier_patient_${patientId}.json`; link.click(); URL.revokeObjectURL(url);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de l’export structuré');
+      toast.error(err.response?.data?.detail || t('medicalFile.structuredExportError'));
     }
   };
 
   const handleDeletePhoto = async (photoId: number) => {
     try {
       await photosApi.delete(patientId, photoId);
-      toast.success('Photo supprimée');
+      toast.success(t('medicalFile.photoDeleted'));
       loadAll();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la suppression');
+      toast.error(err.response?.data?.detail || t('medicalFile.photoDeleteError'));
     }
   };
 
@@ -266,10 +268,10 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
   const handleDeleteFact = async (factId: number) => {
     try {
       await medicalFactsApi.delete(patientId, factId);
-      toast.success('Donnée médicale archivée');
+      toast.success(t('medicalFile.factArchived'));
       loadAll();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la désactivation');
+      toast.error(err.response?.data?.detail || t('medicalFile.factDeactivateError'));
     }
   };
 
@@ -298,7 +300,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
       }
       setComparaisonUrls(urls);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors du chargement de la comparaison");
+      toast.error(err.response?.data?.detail || t('medicalFile.comparisonLoadError'));
     } finally {
       setIsComparaisonLoading(false);
     }
@@ -322,7 +324,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
     return (
       <DashboardLayout>
         <Card><CardContent className="py-10 text-center text-muted-foreground">
-          Patient introuvable ou accès non autorisé.
+          {t('medicalFile.notFound')}
         </CardContent></Card>
       </DashboardLayout>
     );
@@ -334,7 +336,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
         <div className="flex items-start justify-between">
           <div>
             <Button variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => setLocation(backToPatientIndex)}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Retour aux patients
+              <ArrowLeft className="w-4 h-4 mr-1" /> {t('medicalFile.backToPatients')}
             </Button>
             <h1 className="text-3xl font-bold flex items-center gap-2">
               <User className="w-7 h-7 text-muted-foreground" />
@@ -342,14 +344,14 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
             </h1>
             <p className="text-muted-foreground mt-1 flex items-center gap-1">
               <Phone className="w-4 h-4" /> {patient.telephone}
-              {patient.date_naissance && ` · Né(e) le ${new Date(patient.date_naissance).toLocaleDateString('fr-TN')}`}
+              {patient.date_naissance && ` · ${t('medicalFile.bornOn', { date: new Date(patient.date_naissance).toLocaleDateString(i18n.language) })}`}
             </p>
           </div>
           {user?.role === 'medecin' && <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExportStructured}><Download className="w-4 h-4 mr-2" />Export JSON</Button>
+            <Button variant="outline" onClick={handleExportStructured}><Download className="w-4 h-4 mr-2" />{t('medicalFile.exportJson')}</Button>
             <Button onClick={handleExportPdf} disabled={isExporting}>
               {isExporting ? <Spinner className="h-4 w-4 mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-              Exporter PDF
+              {t('medicalFile.exportPdf')}
             </Button>
           </div>}
         </div>
@@ -357,20 +359,20 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
         {user?.role === 'assistante' && (
           <Card className="border-purple-200 bg-purple-50/30">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4" /> Fiche administrative patient</CardTitle>
-              <p className="text-sm text-muted-foreground">Complétez les coordonnées et informations déclaratives. La création du dossier clinique reste réservée au médecin.</p>
+              <CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4" /> {t('medicalFile.adminFileTitle')}</CardTitle>
+              <p className="text-sm text-muted-foreground">{t('medicalFile.adminFileDesc')}</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                {([['prenom', 'Prénom'], ['nom', 'Nom'], ['date_naissance', 'Date de naissance'], ['email', 'E-mail'], ['adresse', 'Adresse'], ['ville', 'Ville'], ['groupe_sanguin', 'Groupe sanguin']] as const).map(([key, label]) => (
+                {([['prenom', 'medicalFile.fieldFirstName'], ['nom', 'medicalFile.fieldLastName'], ['date_naissance', 'medicalFile.fieldBirthDate'], ['email', 'medicalFile.fieldEmail'], ['adresse', 'medicalFile.fieldAddress'], ['ville', 'medicalFile.fieldCity'], ['groupe_sanguin', 'medicalFile.fieldBloodGroup']] as const).map(([key, label]) => (
                   <div key={key}>
-                    <Label htmlFor={`intake-${key}`}>{label}</Label>
+                    <Label htmlFor={`intake-${key}`}>{t(label)}</Label>
                     <Input id={`intake-${key}`} type={key === 'date_naissance' ? 'date' : 'text'} value={intake[key]} onChange={(e) => setIntake((prev) => ({ ...prev, [key]: e.target.value }))} />
                   </div>
                 ))}
               </div>
               <div className="flex justify-end">
-                <Button onClick={handleSaveIntake} disabled={isSavingIntake}><Save className="mr-2 h-4 w-4" />{isSavingIntake ? 'Enregistrement…' : 'Enregistrer les informations'}</Button>
+                <Button onClick={handleSaveIntake} disabled={isSavingIntake}><Save className="mr-2 h-4 w-4" />{isSavingIntake ? t('medicalFile.saving') : t('medicalFile.saveInfo')}</Button>
               </div>
             </CardContent>
           </Card>
@@ -379,26 +381,26 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
         {(patient.allergies || patient.contre_indications) && (
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="py-4 space-y-1">
-              {patient.allergies && <p><strong>Allergies :</strong> {patient.allergies}</p>}
-              {patient.contre_indications && <p><strong>Contre-indications :</strong> {patient.contre_indications}</p>}
+              {patient.allergies && <p><strong>{t('medicalFile.allergiesLabel')}</strong> {patient.allergies}</p>}
+              {patient.contre_indications && <p><strong>{t('medicalFile.contreIndicationsLabel')}</strong> {patient.contre_indications}</p>}
             </CardContent>
           </Card>
         )}
         {canSeeAntecedents && patient.antecedents_medicaux && (
           <Card>
             <CardContent className="py-4">
-              <p><strong>Antécédents médicaux :</strong> {patient.antecedents_medicaux}</p>
+              <p><strong>{t('medicalFile.antecedentsLabel')}</strong> {patient.antecedents_medicaux}</p>
             </CardContent>
           </Card>
         )}
 
         {user?.role === 'medecin' && (
           <Card>
-            <CardHeader><CardTitle className="text-base">Chronologie clinique globale</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">{t('medicalFile.globalTimeline')}</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {globalTimeline.length === 0 ? <p className="text-sm text-muted-foreground">Aucune entrée clinique.</p> : globalTimeline.slice(0, 8).map((entry, index) => (
+              {globalTimeline.length === 0 ? <p className="text-sm text-muted-foreground">{t('medicalFile.noClinicalEntry')}</p> : globalTimeline.slice(0, 8).map((entry, index) => (
                 <div key={`${entry.type}-${entry.date}-${index}`} className="flex items-center justify-between border-b last:border-0 py-2 text-sm">
-                  <span><strong>{entry.type}</strong> — {entry.summary}</span><span className="text-muted-foreground">{new Date(entry.date).toLocaleString('fr-TN')}</span>
+                  <span><strong>{entry.type}</strong> — {entry.summary}</span><span className="text-muted-foreground">{new Date(entry.date).toLocaleString(i18n.language)}</span>
                 </div>
               ))}
             </CardContent>
@@ -407,11 +409,11 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="dossiers"><FileText className="w-4 h-4 mr-1" /> Dossiers ({timeline.length})</TabsTrigger>
-            <TabsTrigger value="consentements"><CheckCircle className="w-4 h-4 mr-1" /> Consentements ({consentements.length})</TabsTrigger>
-            <TabsTrigger value="photos"><ImageIcon className="w-4 h-4 mr-1" /> Photos ({photos.length})</TabsTrigger>
-            <TabsTrigger value="faits-medicaux"><HeartPulse className="w-4 h-4 mr-1" /> Faits médicaux ({facts.length})</TabsTrigger>
-            <TabsTrigger value="prescriptions"><Pill className="w-4 h-4 mr-1" /> Prescriptions ({prescriptions.length})</TabsTrigger>
+            <TabsTrigger value="dossiers"><FileText className="w-4 h-4 mr-1" /> {t('medicalFile.tabDossiers')} ({timeline.length})</TabsTrigger>
+            <TabsTrigger value="consentements"><CheckCircle className="w-4 h-4 mr-1" /> {t('medicalFile.tabConsents')} ({consentements.length})</TabsTrigger>
+            <TabsTrigger value="photos"><ImageIcon className="w-4 h-4 mr-1" /> {t('medicalFile.tabPhotos')} ({photos.length})</TabsTrigger>
+            <TabsTrigger value="faits-medicaux"><HeartPulse className="w-4 h-4 mr-1" /> {t('medicalFile.tabFacts')} ({facts.length})</TabsTrigger>
+            <TabsTrigger value="prescriptions"><Pill className="w-4 h-4 mr-1" /> {t('medicalFile.tabPrescriptions')} ({prescriptions.length})</TabsTrigger>
           </TabsList>
 
           {/* ── Dossiers ── */}
@@ -426,29 +428,29 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
             <div className="flex justify-end">
               {canManageClinicalEntries ? (
                 <Button size="sm" onClick={() => setDossierDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Nouveau dossier
+                  <Plus className="w-4 h-4 mr-1" /> {t('medicalFile.newDossier')}
                 </Button>
               ) : (
-                <p className="text-sm text-muted-foreground">La création de dossiers est réservée aux médecins.</p>
+                <p className="text-sm text-muted-foreground">{t('medicalFile.createDossierRestricted')}</p>
               )}
             </div>
             {timeline.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Aucun dossier trouvé</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('medicalFile.noDossier')}</CardContent></Card>
             ) : (
               timeline.map((item) => (
                 <Card key={item.dossier_id}>
                   <CardHeader>
                     <CardTitle className="text-base flex justify-between items-center">
-                      <span>{item.acte} — {new Date(item.date).toLocaleDateString('fr-TN')}</span>
+                      <span>{item.acte} — {new Date(item.date).toLocaleDateString(i18n.language)}</span>
                       <div className="flex items-center gap-2">
                         {item.facture_id || item.statut_facturation === 'facture' ? (
                           <Badge className="h-8 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
                             <CheckCircle className="w-3 h-3 mr-1" />
-                            Déjà facturé{item.facture_numero ? ` · ${item.facture_numero}` : ''}
+                            {t('medicalFile.alreadyBilled')}{item.facture_numero ? ` · ${item.facture_numero}` : ''}
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="h-8 border-amber-200 bg-amber-50 text-amber-800">
-                            En attente de facturation
+                            {t('medicalFile.awaitingBilling')}
                           </Badge>
                         )}
                         <Badge variant="outline">{item.praticien}</Badge>
@@ -456,11 +458,11 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    {item.observations && <p><strong>Observations :</strong> {item.observations}</p>}
-                    {item.effets_secondaires && <p><strong>Effets secondaires :</strong> {item.effets_secondaires}</p>}
-                    {item.satisfaction && <p><strong>Satisfaction :</strong> {item.satisfaction}/5</p>}
+                    {item.observations && <p><strong>{t('medicalFile.observationsLabel')}</strong> {item.observations}</p>}
+                    {item.effets_secondaires && <p><strong>{t('medicalFile.sideEffectsLabel')}</strong> {item.effets_secondaires}</p>}
+                    {item.satisfaction && <p><strong>{t('medicalFile.satisfactionLabel')}</strong> {item.satisfaction}/5</p>}
                     {item.photos.length > 0 && (
-                      <p className="text-muted-foreground">{item.photos.length} photo(s) associée(s)</p>
+                      <p className="text-muted-foreground">{t('medicalFile.photosAssociated', { count: item.photos.length })}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -473,46 +475,46 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
             <div className="flex justify-end">
               {user?.role === 'medecin' ? (
                 <Button size="sm" onClick={() => setFactDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Nouveau fait médical
+                  <Plus className="w-4 h-4 mr-1" /> {t('medicalFile.newFact')}
                 </Button>
               ) : (
-                <p className="text-sm text-muted-foreground">La saisie des faits médicaux est réservée aux médecins.</p>
+                <p className="text-sm text-muted-foreground">{t('medicalFile.createFactRestricted')}</p>
               )}
             </div>
             {facts.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Aucun fait médical enregistré</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('medicalFile.noFact')}</CardContent></Card>
             ) : (
               <Card>
                 <CardContent className="py-4 space-y-3">
                   {facts.map((f) => (
                     <div key={f.id} className="flex items-center justify-between border-b last:border-0 pb-2 last:pb-0 gap-2">
                       <div className="min-w-0">
-                        <p className="font-medium">{FACT_TYPE_LABELS[f.type_fait] ?? f.type_fait}</p>
+                        <p className="font-medium">{t(FACT_TYPE_LABELS[f.type_fait] ?? f.type_fait)}</p>
                         <p className="text-sm text-muted-foreground truncate">
                           {Object.entries(f.donnees ?? {}).map(([k, v]) => `${k} : ${String(v)}`).join(' · ') || '—'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(f.created_at).toLocaleDateString('fr-TN')}
-                          {' · '}{f.verification_status === 'VERIFIED' ? 'Vérifié' : f.verification_status === 'PENDING_VERIFICATION' ? 'À vérifier' : 'Historique non structuré'}
+                          {new Date(f.created_at).toLocaleDateString(i18n.language)}
+                          {' · '}{f.verification_status === 'VERIFIED' ? t('medicalFile.verified') : f.verification_status === 'PENDING_VERIFICATION' ? t('medicalFile.toVerify') : t('medicalFile.historicalUnstructured')}
                         </p>
                       </div>
                       {user?.role === 'medecin' && (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" aria-label="Archiver ce fait médical">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" aria-label={t('medicalFile.archiveFactAria')}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Archiver cette donnée médicale ?</AlertDialogTitle>
+                              <AlertDialogTitle>{t('medicalFile.archiveFactTitle')}</AlertDialogTitle>
                               <AlertDialogDescription>
-                                La donnée sera masquée (suppression logique) ; l'historique clinique et le journal d'audit médical sont conservés.
+                                {t('medicalFile.archiveFactDesc')}
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Annuler</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteFact(f.id)}>Archiver</AlertDialogAction>
+                              <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDeleteFact(f.id)}>{t('medicalFile.archive')}</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -529,35 +531,50 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
             <div className="flex justify-end">
               {user?.role === 'medecin' ? (
                 <Button size="sm" onClick={() => setPrescriptionDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Nouvelle prescription
+                  <Plus className="w-4 h-4 mr-1" /> {t('medicalFile.newPrescription')}
                 </Button>
               ) : (
-                <p className="text-sm text-muted-foreground">La création de prescriptions est réservée aux médecins.</p>
+                <p className="text-sm text-muted-foreground">{t('medicalFile.createPrescriptionRestricted')}</p>
               )}
             </div>
             {prescriptions.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Aucune prescription enregistrée</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('medicalFile.noPrescription')}</CardContent></Card>
             ) : (
               <Card>
                 <CardContent className="py-4 space-y-3">
-                  {prescriptions.map((p) => (
+                  {prescriptions.map((p) => {
+                    const isAnalyse = p.details?.type === 'analyse';
+                    return (
                     <div key={p.id} className="border-b last:border-0 pb-3 last:pb-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">{String(p.details?.medicament ?? 'Prescription')}</p>
+                        <p className="font-medium flex items-center gap-1.5">
+                          {isAnalyse ? <FlaskConical className="w-3.5 h-3.5 text-muted-foreground" /> : <Pill className="w-3.5 h-3.5 text-muted-foreground" />}
+                          {isAnalyse ? t('medicalFile.analyse') : String(p.details?.medicament ?? t('medicalFile.prescription'))}
+                        </p>
                         <Badge
                           variant="outline"
                           className={p.statut === 'ACTIVE' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : p.statut === 'COMPLETED' ? 'border-sky-200 bg-sky-50 text-sky-800' : 'border-slate-200 bg-slate-50 text-slate-600'}
                         >
-                          {p.statut === 'ACTIVE' ? 'Active' : p.statut === 'COMPLETED' ? 'Terminée' : 'Annulée'}
+                          {p.statut === 'ACTIVE' ? t('medicalFile.statusActive') : p.statut === 'COMPLETED' ? t('medicalFile.statusCompleted') : t('medicalFile.statusCancelled')}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {[p.details?.dosage, p.details?.frequence, p.details?.duree].filter(Boolean).join(' · ') || '—'}
-                      </p>
-                      {p.details?.instructions ? <p className="text-sm text-muted-foreground">{String(p.details.instructions)}</p> : null}
-                      <p className="text-xs text-muted-foreground">Prescrite le {new Date(p.date_prescription).toLocaleDateString('fr-TN')}</p>
+                      {isAnalyse ? (
+                        <>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{String(p.details?.analyse ?? '—')}</p>
+                          {p.details?.laboratoire ? <p className="text-xs text-muted-foreground">{t('medicalFile.laboratory')}{String(p.details.laboratoire)}</p> : null}
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            {[p.details?.dosage, p.details?.frequence, p.details?.duree].filter(Boolean).join(' · ') || '—'}
+                          </p>
+                          {p.details?.instructions ? <p className="text-sm text-muted-foreground">{String(p.details.instructions)}</p> : null}
+                        </>
+                      )}
+                      <p className="text-xs text-muted-foreground">{t('medicalFile.prescribedOn', { date: new Date(p.date_prescription).toLocaleDateString(i18n.language) })}</p>
                     </div>
-                  ))}
+                    );
+                  })}
                 </CardContent>
               </Card>
             )}
@@ -568,14 +585,14 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
             <div className="flex justify-end">
               {canManageClinicalEntries ? (
                 <Button size="sm" onClick={() => setConsentDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Signer un consentement
+                  <Plus className="w-4 h-4 mr-1" /> {t('medicalFile.signConsent')}
                 </Button>
               ) : (
-                <p className="text-sm text-muted-foreground">La signature des consentements est réservée aux médecins.</p>
+                <p className="text-sm text-muted-foreground">{t('medicalFile.signConsentRestricted')}</p>
               )}
             </div>
             {consentements.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Aucun consentement trouvé</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('medicalFile.noConsent')}</CardContent></Card>
             ) : (
               <Card>
                 <CardContent className="py-4 space-y-3">
@@ -584,12 +601,12 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                       <div>
                         <p className="font-medium">{c.type}</p>
                         <p className="text-sm text-muted-foreground">
-                          Signé le {new Date(c.signe_le).toLocaleDateString('fr-TN')} ({c.methode})
+                          {t('medicalFile.signedOn', { date: new Date(c.signe_le).toLocaleDateString(i18n.language), method: c.methode })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={c.est_valide ? 'default' : 'destructive'}>
-                          {c.est_valide ? 'Valide' : 'Invalide'}
+                          {c.est_valide ? t('medicalFile.valid') : t('medicalFile.invalid')}
                         </Badge>
                         <Button
                           type="button"
@@ -597,9 +614,9 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                           variant="outline"
                           className="h-8 gap-1"
                           onClick={() => handleOpenConsentement(c.id)}
-                          aria-label={`Ouvrir le consentement signé ${c.type}`}
+                          aria-label={t('medicalFile.openSignedConsentAria', { type: c.type })}
                         >
-                          <ExternalLink className="w-3.5 h-3.5" /> Ouvrir
+                          <ExternalLink className="w-3.5 h-3.5" /> {t('medicalFile.open')}
                         </Button>
                       </div>
                     </div>
@@ -621,7 +638,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                   disabled={photos.length === 0}
                 >
                   <SlidersHorizontal className="w-4 h-4 mr-1" />
-                  Comparer Avant/Après
+                  {t('medicalFile.compareBeforeAfter')}
                 </Button>
                 <div className="flex gap-2">
                   <Tooltip>
@@ -635,33 +652,33 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                         }}
                       >
                         <Camera className="w-4 h-4 mr-1" />
-                        Photo Après
+                        {t('medicalFile.photoAfter')}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      <p>Enregistrer une photo « Après » pour le patient</p>
+                      <p>{t('medicalFile.tooltipSaveAfter')}</p>
                     </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button size="sm" onClick={() => setUploadDialogOpen(true)}>
-                        <Plus className="w-4 h-4 mr-1" /> Ajouter une photo
+                        <Plus className="w-4 h-4 mr-1" /> {t('medicalFile.addPhoto')}
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      <p>Ajouter une photo Avant, Après, Progression, etc.</p>
+                      <p>{t('medicalFile.tooltipAddPhoto')}</p>
                     </TooltipContent>
                   </Tooltip>
                 </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                La gestion des photos et les annotations au crayon sont réservées aux médecins.
+                {t('medicalFile.photosRestricted')}
               </p>
             )}
 
             {photos.length === 0 ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Aucune photo trouvée</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('medicalFile.noPhoto')}</CardContent></Card>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {photos.map((p) => (
@@ -694,7 +711,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">
-                                <p>Simuler un résultat IA</p>
+                                <p>{t('medicalFile.simulateAi')}</p>
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -712,7 +729,7 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent side="top">
-                                <p>Ajouter une photo « Après » pour cette zone</p>
+                                <p>{t('medicalFile.tooltipQuickAfter')}</p>
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -724,20 +741,20 @@ export default function MedicalFile({ patientId }: { patientId: number }) {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Supprimer cette photo ?</AlertDialogTitle>
+                                <AlertDialogTitle>{t('medicalFile.deletePhotoTitle')}</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  La photo sera archivée (suppression réversible par un administrateur), pas effacée définitivement.
+                                  {t('medicalFile.deletePhotoDesc')}
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeletePhoto(p.id)}>Supprimer</AlertDialogAction>
+                                <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeletePhoto(p.id)}>{t('common.delete')}</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">{new Date(p.date).toLocaleDateString('fr-TN')}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(p.date).toLocaleDateString(i18n.language)}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -840,6 +857,7 @@ function ComparaisonAvantApresDialog({
   onZoneChange: (v: string) => void;
   onReload: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [leftIndex, setLeftIndex] = useState(0);
   const [rightIndex, setRightIndex] = useState(0);
 
@@ -859,10 +877,10 @@ function ComparaisonAvantApresDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Eye className="w-5 h-5" />
-            Comparaison Avant / Après
+            {t('medicalFile.comparisonTitle')}
           </DialogTitle>
           <DialogDescription>
-            Visualisez côte-à-côte les photos avant et après traitement du patient.
+            {t('medicalFile.comparisonDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -872,28 +890,28 @@ function ComparaisonAvantApresDialog({
           </div>
         ) : !data ? (
           <div className="text-center py-8 text-muted-foreground">
-            Aucune donnée de comparaison disponible.
+            {t('medicalFile.noComparisonData')}
           </div>
         ) : (
           <div className="space-y-4">
             {/* Sélecteur de zone */}
             <div className="flex items-center gap-2">
-              <Label className="text-sm whitespace-nowrap">Filtrer par zone :</Label>
+              <Label className="text-sm whitespace-nowrap">{t('medicalFile.filterByZone')}</Label>
               <Input
                 value={zoneFilter}
                 onChange={(e) => onZoneChange(e.target.value)}
-                placeholder="Laisser vide pour toutes les zones"
+                placeholder={t('medicalFile.zonePlaceholder')}
                 className="flex-1"
               />
               <Button variant="outline" size="sm" onClick={onReload}>
-                Filtrer
+                {t('medicalFile.filter')}
               </Button>
             </div>
 
             {/* Sélecteurs de photos */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-center block">Avant</Label>
+                <Label className="text-sm font-medium text-center block">{t('medicalFile.before')}</Label>
                 {data.avant.length > 0 ? (
                   <>
                     <div className="flex items-center gap-2">
@@ -906,7 +924,7 @@ function ComparaisonAvantApresDialog({
                         ←
                       </Button>
                       <span className="text-xs text-muted-foreground">
-                        {data.avant[leftIndex] ? new Date(data.avant[leftIndex].date).toLocaleDateString('fr-TN') : ''}
+                        {data.avant[leftIndex] ? new Date(data.avant[leftIndex].date).toLocaleDateString(i18n.language) : ''}
                       </span>
                       <Button
                         variant="outline"
@@ -921,25 +939,25 @@ function ComparaisonAvantApresDialog({
                       {data.avant[leftIndex] && urls[`photo_${data.avant[leftIndex].id}`] ? (
                         <img
                           src={urls[`photo_${data.avant[leftIndex].id}`]}
-                          alt="Avant"
+                          alt={t('medicalFile.before')}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                          {data.avant[leftIndex] ? 'Chargement...' : 'Pas de photo'}
+                          {data.avant[leftIndex] ? t('medicalFile.loading') : t('medicalFile.noPhotoShort')}
                         </div>
                       )}
                     </div>
                   </>
                 ) : (
                   <div className="aspect-square bg-muted rounded-md flex items-center justify-center text-muted-foreground text-sm">
-                    Aucune photo avant
+                    {t('medicalFile.noBeforePhoto')}
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-center block">Après</Label>
+                <Label className="text-sm font-medium text-center block">{t('medicalFile.after')}</Label>
                 {data.apres.length > 0 ? (
                   <>
                     <div className="flex items-center gap-2">
@@ -952,7 +970,7 @@ function ComparaisonAvantApresDialog({
                         ←
                       </Button>
                       <span className="text-xs text-muted-foreground">
-                        {data.apres[rightIndex] ? new Date(data.apres[rightIndex].date).toLocaleDateString('fr-TN') : ''}
+                        {data.apres[rightIndex] ? new Date(data.apres[rightIndex].date).toLocaleDateString(i18n.language) : ''}
                       </span>
                       <Button
                         variant="outline"
@@ -967,19 +985,19 @@ function ComparaisonAvantApresDialog({
                       {data.apres[rightIndex] && urls[`photo_${data.apres[rightIndex].id}`] ? (
                         <img
                           src={urls[`photo_${data.apres[rightIndex].id}`]}
-                          alt="Après"
+                          alt={t('medicalFile.after')}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                          {data.apres[rightIndex] ? 'Chargement...' : 'Pas de photo'}
+                          {data.apres[rightIndex] ? t('medicalFile.loading') : t('medicalFile.noPhotoShort')}
                         </div>
                       )}
                     </div>
                   </>
                 ) : (
                   <div className="aspect-square bg-muted rounded-md flex items-center justify-center text-muted-foreground text-sm">
-                    Aucune photo après
+                    {t('medicalFile.noAfterPhoto')}
                   </div>
                 )}
               </div>
@@ -987,8 +1005,8 @@ function ComparaisonAvantApresDialog({
 
             {/* Résumé */}
             <div className="text-center text-xs text-muted-foreground">
-              {data.avant.length} photo(s) avant · {data.apres.length} photo(s) après
-              {zoneFilter && <span className="ml-2">(zone : {zoneFilter})</span>}
+              {t('medicalFile.comparisonSummary', { before: data.avant.length, after: data.apres.length })}
+              {zoneFilter && <span className="ml-2">{t('medicalFile.zoneLabel', { zone: zoneFilter })}</span>}
             </div>
           </div>
         )}
@@ -1013,6 +1031,7 @@ function QuickAfterPhotoDialog({
   photoAvant: PhotoItem | null;
   onUploaded: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -1027,18 +1046,18 @@ function QuickAfterPhotoDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) { toast.error('Sélectionnez une photo'); return; }
+    if (!file) { toast.error(t('medicalFile.selectPhoto')); return; }
     setIsUploading(true);
     try {
       await photosApi.upload(patientId, file, {
         type_photo: 'apres',
         zone: zonePrefilled || undefined,
       });
-      toast.success('Photo « Après » ajoutée avec succès');
+      toast.success(t('medicalFile.afterPhotoSuccess'));
       onOpenChange(false);
       onUploaded();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'envoi de la photo");
+      toast.error(err.response?.data?.detail || t('medicalFile.photoUploadError'));
     } finally {
       setIsUploading(false);
     }
@@ -1050,18 +1069,18 @@ function QuickAfterPhotoDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Camera className="w-5 h-5 text-green-600" />
-            Ajouter une photo « Après »
+            {t('medicalFile.addAfterPhoto')}
           </DialogTitle>
           <DialogDescription>
             {photoAvant
-              ? `Photo « Après » associée à la zone : ${photoAvant.zone || 'Non spécifiée'} (photo Avant du ${new Date(photoAvant.date).toLocaleDateString('fr-TN')})`
-              : 'Enregistrez la photo après traitement du patient.'
+              ? t('medicalFile.afterPhotoLinkedDesc', { zone: photoAvant.zone || t('medicalFile.notSpecified'), date: new Date(photoAvant.date).toLocaleDateString(i18n.language) })
+              : t('medicalFile.afterPhotoDesc')
             }
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="file-after">Fichier photo</Label>
+            <Label htmlFor="file-after">{t('medicalFile.photoFile')}</Label>
             <input
               id="file-after"
               type="file"
@@ -1076,20 +1095,20 @@ function QuickAfterPhotoDialog({
             )}
           </div>
           <div>
-            <Label>Zone anatomique</Label>
+            <Label>{t('medicalFile.anatomicalZone')}</Label>
             <div className="text-sm text-muted-foreground">
-              {zonePrefilled || <span className="italic">Non spécifiée</span>}
+              {zonePrefilled || <span className="italic">{t('medicalFile.notSpecified')}</span>}
             </div>
           </div>
           <div>
-            <Label>Type</Label>
-            <div className="text-sm font-medium text-green-700">Après</div>
+            <Label>{t('medicalFile.type')}</Label>
+            <div className="text-sm font-medium text-green-700">{t('medicalFile.after')}</div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isUploading}>
               {isUploading ? <Spinner className="h-4 w-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              Enregistrer la photo Après
+              {t('medicalFile.saveAfterPhoto')}
             </Button>
           </DialogFooter>
         </form>
@@ -1101,8 +1120,8 @@ function QuickAfterPhotoDialog({
 // ─────────────────────────────────────────────────────────
 // ── Dialog Simulation IA (inchangé — comportement identique) ──
 
-function SimulationIADialog({
-  open, onOpenChange, patientId, photo, photoUrl, consentements, onConsentSigned
+function SimulationIADialog({ 
+  open, onOpenChange, patientId, photo, photoUrl, consentements, onConsentSigned 
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -1112,6 +1131,7 @@ function SimulationIADialog({
   consentements: ConsentementItem[];
   onConsentSigned: () => void;
 }) {
+  const { t } = useTranslation();
   const [zone, setZone] = useState('');
   const [intensite, setIntensite] = useState(20);
   const [instructions, setInstructions] = useState('');
@@ -1150,9 +1170,9 @@ function SimulationIADialog({
         masque_base64: masqueBase64
       });
       setResultUrl(res.data.url_resultat);
-      toast.success('Simulation générée avec succès');
+      toast.success(t('medicalFile.simGenerated'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la génération');
+      toast.error(err.response?.data?.detail || t('medicalFile.simError'));
     } finally {
       setIsGenerating(false);
     }
@@ -1165,11 +1185,11 @@ function SimulationIADialog({
         signature_base64: sigB64,
         methode_signature: 'tactile'
       });
-      toast.success('Consentement IA signé');
+      toast.success(t('medicalFile.aiConsentSigned'));
       setShowConsentSign(false);
       onConsentSigned();
     } catch (err: any) {
-      toast.error("Erreur lors de la signature");
+      toast.error(t('medicalFile.signError'));
     }
   };
 
@@ -1181,29 +1201,28 @@ function SimulationIADialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
-            Simulation de résultat par IA
+            {t('medicalFile.simTitle')}
           </DialogTitle>
           <DialogDescription>
-            Générez une simulation visuelle du résultat attendu pour la zone : {photo.zone || 'Non spécifiée'}
+            {t('medicalFile.simDesc', { zone: photo.zone || t('medicalFile.notSpecified') })}
           </DialogDescription>
         </DialogHeader>
 
         {showConsentSign ? (
           <div className="space-y-4 py-4">
             <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md text-sm text-yellow-800">
-              <strong>Consentement requis :</strong> Le patient doit accepter que sa photo soit traitée par un algorithme d'IA
-              avant toute simulation. Cette simulation n'est pas contractuelle.
+              <strong>{t('medicalFile.consentRequiredStrong')}</strong> {t('medicalFile.consentRequiredText')}
             </div>
-            <Label>Signature du patient</Label>
+            <Label>{t('medicalFile.patientSignature')}</Label>
             <SignaturePad onSave={handleSignConsent} onCancel={() => setShowConsentSign(false)} />
           </div>
         ) : showCrayonPad ? (
-          <SimulationCrayonPad
-            imageUrl={photoUrl}
+          <SimulationCrayonPad 
+            imageUrl={photoUrl} 
             onSave={(mask) => {
               setMasqueBase64(mask);
               setShowCrayonPad(false);
-              toast.success('Marquage enregistré');
+              toast.success(t('medicalFile.markingSaved'));
             }}
             onCancel={() => setShowCrayonPad(false)}
           />
@@ -1211,23 +1230,23 @@ function SimulationIADialog({
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-center block">Original (Avant)</Label>
+                <Label className="text-center block">{t('medicalFile.originalBefore')}</Label>
                 <div className="aspect-square bg-muted rounded-md overflow-hidden">
                   <img src={photoUrl} alt="Original" className="w-full h-full object-cover" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label className="text-center block">Simulation IA</Label>
+                <Label className="text-center block">{t('medicalFile.aiSimulation')}</Label>
                 <div className="aspect-square bg-muted rounded-md overflow-hidden relative">
                   <img src={resultUrl} alt="Simulation" className="w-full h-full object-cover" />
                   <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded">
-                    Simulation non contractuelle
+                    {t('medicalFile.nonContractual')}
                   </div>
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={() => onOpenChange(false)}>Fermer</Button>
+              <Button onClick={() => onOpenChange(false)}>{t('medicalFile.close')}</Button>
             </DialogFooter>
           </div>
         ) : (
@@ -1238,48 +1257,48 @@ function SimulationIADialog({
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="zone">Zone anatomique</Label>
-                  <Input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Ex: Lèvres, Sillon nasogénien..." />
+                  <Label htmlFor="zone">{t('medicalFile.anatomicalZone')}</Label>
+                  <Input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder={t('medicalFile.zoneExample')} />
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between">
-                    <Label htmlFor="intensite">Intensité du résultat</Label>
+                    <Label htmlFor="intensite">{t('medicalFile.intensity')}</Label>
                     <span className="text-sm text-muted-foreground">{intensite}%</span>
                   </div>
-                  <input
-                    type="range"
-                    id="intensite"
-                    min="0" max="100"
-                    value={intensite}
+                  <input 
+                    type="range" 
+                    id="intensite" 
+                    min="0" max="100" 
+                    value={intensite} 
                     onChange={(e) => setIntensite(parseInt(e.target.value))}
                     className="w-full"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>Naturel</span>
-                    <span>Prononcé</span>
+                    <span>{t('medicalFile.natural')}</span>
+                    <span>{t('medicalFile.marked')}</span>
                   </div>
                 </div>
-
+                
                 <div className="space-y-2">
-                  <Label>Marquage précis (Crayon)</Label>
-                  <Button
-                    variant="outline"
+                  <Label>{t('medicalFile.preciseMarking')}</Label>
+                  <Button 
+                    variant="outline" 
                     className={`w-full ${masqueBase64 ? 'border-green-500 bg-green-50 text-green-700' : ''}`}
                     onClick={() => setShowCrayonPad(true)}
                   >
                     <Pencil className="w-4 h-4 mr-2" />
-                    {masqueBase64 ? 'Modifier le marquage' : 'Dessiner sur la photo'}
+                    {masqueBase64 ? t('medicalFile.editMarking') : t('medicalFile.drawOnPhoto')}
                   </Button>
-                  {masqueBase64 && <p className="text-[10px] text-green-600 text-center">✓ Masque de guidage actif</p>}
+                  {masqueBase64 && <p className="text-[10px] text-green-600 text-center">{t('medicalFile.guideMaskActive')}</p>}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="instructions">Moteur d'instructions (Engine)</Label>
-                  <Textarea
-                    id="instructions"
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="Instructions pour l'IA (ex: Augmenter le volume en gardant un aspect naturel...)"
+                  <Label htmlFor="instructions">{t('medicalFile.instructionEngine')}</Label>
+                  <Textarea 
+                    id="instructions" 
+                    value={instructions} 
+                    onChange={(e) => setInstructions(e.target.value)} 
+                    placeholder={t('medicalFile.instructionPlaceholder')}
                     className="h-20 text-xs"
                   />
                 </div>
@@ -1287,7 +1306,7 @@ function SimulationIADialog({
                 <div className="pt-2">
                   <Button className="w-full" onClick={handleGenerate} disabled={isGenerating}>
                     {isGenerating ? <Spinner className="h-4 w-4 mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                    {hasSimConsent ? 'Générer la simulation' : 'Signer le consentement et générer'}
+                    {hasSimConsent ? t('medicalFile.generateSimulation') : t('medicalFile.signAndGenerate')}
                   </Button>
                 </div>
               </div>
@@ -1306,6 +1325,7 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
   open: boolean; onOpenChange: (v: boolean) => void; patientId: number; actes: Acte[];
   canToggleActePrices: boolean; currentUserId: number; onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const currency = useCurrency();
   const [selectedActes, setSelectedActes] = useState<{id: number, nom: string, prix: number}[]>([]);
   const [manualLignes, setManualLignes] = useState<{nom: string, prix: number}[]>([]);
@@ -1321,11 +1341,11 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
   const [isProcessingSoap, setIsProcessingSoap] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setSelectedActes([]);
+    if (open) { 
+      setSelectedActes([]); 
       setManualLignes([]);
-      setObservations('');
-      setEffetsSecondaires('');
+      setObservations(''); 
+      setEffetsSecondaires(''); 
       setIsSaving(false);
       setShowActePrices(!canToggleActePrices);
     }
@@ -1350,9 +1370,9 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
-      toast.info("Enregistrement en cours...");
+      toast.info(t('medicalFile.recordingInProgress'));
     } catch (err) {
-      toast.error("Accès micro refusé ou non supporté");
+      toast.error(t('medicalFile.micDenied'));
     }
   };
 
@@ -1368,9 +1388,9 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
     try {
       const res = await scribeIaApi.transcribe(blob);
       setObservations(prev => prev ? prev + "\n" + res.data.text : res.data.text);
-      toast.success("Transcription réussie");
+      toast.success(t('medicalFile.transcriptionSuccess'));
     } catch (err) {
-      toast.error("Échec de la transcription");
+      toast.error(t('medicalFile.transcriptionFailed'));
     } finally {
       setIsRecordingLoading(false);
     }
@@ -1378,7 +1398,7 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
 
   const handleScribeProcess = async () => {
     if (!observations || observations.length < 10) {
-      toast.error("Observations trop courtes pour l'IA");
+      toast.error(t('medicalFile.obsTooShort'));
       return;
     }
     setIsProcessingSoap(true);
@@ -1387,9 +1407,9 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
       const soap = res.data.notes_structurees_soap;
       const formatted = `[SUBJECTIVE]\n${soap.subjective}\n\n[OBJECTIVE]\n${soap.objective}\n\n[ASSESSMENT]\n${soap.assessment}\n\n[PLAN]\n${soap.plan}`;
       setObservations(formatted);
-      toast.success("Note SOAP générée par IA");
+      toast.success(t('medicalFile.soapGenerated'));
     } catch (err) {
-      toast.error("Erreur Scribe IA");
+      toast.error(t('medicalFile.scribeError'));
     } finally {
       setIsProcessingSoap(false);
     }
@@ -1409,7 +1429,7 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedActes.length === 0 && manualLignes.filter(l => l.nom).length === 0) {
-      toast.error('Sélectionnez au moins un acte ou saisissez une ligne manuelle');
+      toast.error(t('medicalFile.selectActOrLine'));
       return;
     }
     setIsSaving(true);
@@ -1427,11 +1447,11 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
         effets_secondaires: effetsSecondaires || undefined,
         actes_details: allActes
       });
-      toast.success('Dossier créé et transmis à la secrétaire');
+      toast.success(t('medicalFile.dossierCreated'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la création du dossier');
+      toast.error(err.response?.data?.detail || t('medicalFile.dossierCreateError'));
     } finally {
       setIsSaving(false);
     }
@@ -1443,21 +1463,21 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-600" />
-            Validation des Actes & Scribe IA
+            {t('medicalFile.newDossierTitle')}
           </DialogTitle>
-          <DialogDescription>Sélectionnez les actes et utilisez la dictée vocale pour vos notes.</DialogDescription>
+          <DialogDescription>{t('medicalFile.newDossierDesc')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
-                <Label>Actes du catalogue</Label>
-                <select
+                <Label>{t('medicalFile.catalogActes')}</Label>
+                <select 
                   className="w-full h-9 px-3 border rounded-md text-sm mb-2"
                   onChange={(e) => addActe(e.target.value)}
                   value=""
                 >
-                  <option value="">— Ajouter un acte —</option>
+                  <option value="">{t('medicalFile.addActeOption')}</option>
                   {actes.map((a) => (
                     <option key={a.id} value={a.id}>
                       {showActePrices
@@ -1466,7 +1486,7 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
                     </option>
                   ))}
                 </select>
-
+                
                 <div className="space-y-2">
                   {selectedActes.map((a, i) => (
                     <div key={i} className="flex items-center justify-between p-2 bg-purple-50 rounded border border-purple-100">
@@ -1486,10 +1506,10 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
                       className="text-xs text-muted-foreground"
                       onClick={() => setShowActePrices((visible) => !visible)}
                       aria-pressed={showActePrices}
-                      title={showActePrices ? 'Masquer les prix' : 'Afficher les prix'}
+                      title={showActePrices ? t('medicalFile.hidePrices') : t('medicalFile.showPrices')}
                     >
                       {showActePrices ? <EyeOff className="mr-1.5 h-3.5 w-3.5" /> : <Eye className="mr-1.5 h-3.5 w-3.5" />}
-                      {showActePrices ? 'Masquer les prix' : 'Afficher les prix'}
+                      {showActePrices ? t('medicalFile.hidePrices') : t('medicalFile.showPrices')}
                     </Button>
                   </div>
                 )}
@@ -1497,23 +1517,23 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <Label>Saisie manuelle</Label>
+                  <Label>{t('medicalFile.manualEntry')}</Label>
                   <Button type="button" variant="outline" size="xs" onClick={addManualLigne} className="h-7 text-[10px]">
-                    <Plus className="w-3 h-3 mr-1" /> Ligne
+                    <Plus className="w-3 h-3 mr-1" /> {t('medicalFile.line')}
                   </Button>
                 </div>
                 {manualLignes.map((l, i) => (
                   <div key={i} className="flex gap-2">
-                    <Input
-                      placeholder="Acte"
-                      value={l.nom}
+                    <Input 
+                      placeholder={t('medicalFile.actePlaceholder')} 
+                      value={l.nom} 
                       onChange={(e) => setManualLignes(manualLignes.map((item, idx) => idx === i ? {...item, nom: e.target.value} : item))}
                       className="flex-1 h-8 text-sm"
                     />
-                    <Input
-                      type="number"
-                      placeholder="Prix"
-                      value={l.prix}
+                    <Input 
+                      type="number" 
+                      placeholder={t('medicalFile.pricePlaceholder')} 
+                      value={l.prix} 
                       onChange={(e) => setManualLignes(manualLignes.map((item, idx) => idx === i ? {...item, prix: Number(e.target.value)} : item))}
                       className="w-20 h-8 text-sm"
                     />
@@ -1527,58 +1547,58 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
 
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <Label htmlFor="observations">Observations Médicales</Label>
+                <Label htmlFor="observations">{t('medicalFile.medicalObservations')}</Label>
                 <div className="flex gap-1">
                   {isRecording ? (
                     <Button type="button" size="xs" variant="destructive" onClick={stopRecording} className="h-7 animate-pulse">
-                      <Square className="w-3 h-3 mr-1" /> Stop
+                      <Square className="w-3 h-3 mr-1" /> {t('medicalFile.stop')}
                     </Button>
                   ) : (
                     <Button type="button" size="xs" variant="outline" onClick={startRecording} className="h-7 text-red-600 border-red-200">
-                      <Mic className="w-3 h-3 mr-1" /> Dictée
+                      <Mic className="w-3 h-3 mr-1" /> {t('medicalFile.dictation')}
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="secondary"
-                    onClick={handleScribeProcess}
+                  <Button 
+                    type="button" 
+                    size="xs" 
+                    variant="secondary" 
+                    onClick={handleScribeProcess} 
                     disabled={isProcessingSoap || !observations}
                     className="h-7"
                   >
                     {isProcessingSoap ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
-                    SOAP
+                    {t('medicalFile.soap')}
                   </Button>
                 </div>
               </div>
               <div className="relative">
-                <Textarea
-                  id="observations"
-                  value={observations}
-                  onChange={(e) => setObservations(e.target.value)}
-                  rows={8}
+                <Textarea 
+                  id="observations" 
+                  value={observations} 
+                  onChange={(e) => setObservations(e.target.value)} 
+                  rows={8} 
                   className="text-sm font-mono"
-                  placeholder="Dictez ou saisissez vos notes ici..."
+                  placeholder={t('medicalFile.dictationPlaceholder')}
                 />
                 {isTranscribing && (
                   <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
                     <div className="flex items-center gap-2 text-xs font-medium">
-                      <Loader2 className="w-4 h-4 animate-spin" /> Transcription...
+                      <Loader2 className="w-4 h-4 animate-spin" /> {t('medicalFile.transcribing')}
                     </div>
                   </div>
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="effets" className="text-xs">Effets secondaires / Notes post-acte</Label>
+                <Label htmlFor="effets" className="text-xs">{t('medicalFile.sideEffectsNotes')}</Label>
                 <Textarea id="effets" value={effetsSecondaires} onChange={(e) => setEffetsSecondaires(e.target.value)} rows={2} className="text-sm" />
               </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isSaving} className="bg-purple-600 hover:bg-purple-700">
-              {isSaving ? <Spinner className="h-4 w-4" /> : 'Valider pour Facturation'}
+              {isSaving ? <Spinner className="h-4 w-4" /> : t('medicalFile.validateForBilling')}
             </Button>
           </DialogFooter>
         </form>
@@ -1593,6 +1613,7 @@ function NewDossierDialog({ open, onOpenChange, patientId, actes, canToggleActeP
 function SignConsentDialog({ open, onOpenChange, patientId, actes, onSigned }: {
   open: boolean; onOpenChange: (v: boolean) => void; patientId: number; actes: Acte[]; onSigned: () => void;
 }) {
+  const { t } = useTranslation();
   const [acteId, setActeId] = useState('');
   const [signing, setSigning] = useState(false);
 
@@ -1605,11 +1626,11 @@ function SignConsentDialog({ open, onOpenChange, patientId, actes, onSigned }: {
         signature_base64: base64,
         methode_signature: 'tactile',
       });
-      toast.success('Consentement signé');
+      toast.success(t('medicalFile.consentSigned'));
       onOpenChange(false);
       onSigned();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de la signature');
+      toast.error(err.response?.data?.detail || t('medicalFile.signError'));
     }
   };
 
@@ -1617,21 +1638,21 @@ function SignConsentDialog({ open, onOpenChange, patientId, actes, onSigned }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Signer un consentement</DialogTitle>
-          <DialogDescription>Le patient doit signer directement ci-dessous.</DialogDescription>
+          <DialogTitle>{t('medicalFile.signConsentTitle')}</DialogTitle>
+          <DialogDescription>{t('medicalFile.signConsentDesc')}</DialogDescription>
         </DialogHeader>
         {!signing ? (
           <div className="space-y-4">
             <div>
-              <Label htmlFor="acte-consent">Acte concerné</Label>
+              <Label htmlFor="acte-consent">{t('medicalFile.acteConcerned')}</Label>
               <select id="acte-consent" value={acteId} onChange={(e) => setActeId(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-                <option value="">— Non spécifié —</option>
+                <option value="">{t('medicalFile.notSpecifiedOption')}</option>
                 {actes.map((a) => <option key={a.id} value={a.id}>{a.nom}</option>)}
               </select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-              <Button type="button" onClick={() => setSigning(true)}>Continuer vers la signature</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+              <Button type="button" onClick={() => setSigning(true)}>{t('medicalFile.continueToSignature')}</Button>
             </DialogFooter>
           </div>
         ) : (
@@ -1648,6 +1669,7 @@ function SignConsentDialog({ open, onOpenChange, patientId, actes, onSigned }: {
 function UploadPhotoDialog({ open, onOpenChange, patientId, onUploaded }: {
   open: boolean; onOpenChange: (v: boolean) => void; patientId: number; onUploaded: () => void;
 }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [typePhoto, setTypePhoto] = useState('avant');
   const [zone, setZone] = useState('');
@@ -1657,15 +1679,15 @@ function UploadPhotoDialog({ open, onOpenChange, patientId, onUploaded }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) { toast.error('Sélectionnez une photo'); return; }
+    if (!file) { toast.error(t('medicalFile.selectPhoto')); return; }
     setIsUploading(true);
     try {
       await photosApi.upload(patientId, file, { type_photo: typePhoto, zone: zone || undefined });
-      toast.success('Photo ajoutée');
+      toast.success(t('medicalFile.photoAdded'));
       onOpenChange(false);
       onUploaded();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'envoi de la photo");
+      toast.error(err.response?.data?.detail || t('medicalFile.photoUploadError'));
     } finally {
       setIsUploading(false);
     }
@@ -1675,12 +1697,12 @@ function UploadPhotoDialog({ open, onOpenChange, patientId, onUploaded }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Ajouter une photo médicale</DialogTitle>
-          <DialogDescription>JPEG/PNG/WEBP, 20 Mo max. EXIF retiré et filigrane appliqués automatiquement.</DialogDescription>
+          <DialogTitle>{t('medicalFile.addMedicalPhoto')}</DialogTitle>
+          <DialogDescription>{t('medicalFile.addMedicalPhotoDesc')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="file">Fichier</Label>
+            <Label htmlFor="file">{t('medicalFile.file')}</Label>
             <input
               id="file"
               type="file"
@@ -1690,22 +1712,22 @@ function UploadPhotoDialog({ open, onOpenChange, patientId, onUploaded }: {
             />
           </div>
           <div>
-            <Label htmlFor="type_photo">Type</Label>
+            <Label htmlFor="type_photo">{t('medicalFile.type')}</Label>
             <select id="type_photo" value={typePhoto} onChange={(e) => setTypePhoto(e.target.value)} className="w-full h-9 px-3 border rounded-md text-sm">
-              <option value="avant">Avant</option>
-              <option value="apres">Après</option>
-              <option value="progression">Progression</option>
-              <option value="complication">Complication</option>
-              <option value="autre">Autre</option>
+              <option value="avant">{t('medicalFile.before')}</option>
+              <option value="apres">{t('medicalFile.after')}</option>
+              <option value="progression">{t('medicalFile.progression')}</option>
+              <option value="complication">{t('medicalFile.complication')}</option>
+              <option value="autre">{t('medicalFile.other')}</option>
             </select>
           </div>
           <div>
-            <Label htmlFor="zone">Zone anatomique</Label>
-            <input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="ex : visage, lèvres" className="w-full h-9 px-3 border rounded-md text-sm" />
+            <Label htmlFor="zone">{t('medicalFile.anatomicalZone')}</Label>
+            <input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder={t('medicalFile.zoneHint')} className="w-full h-9 px-3 border rounded-md text-sm" />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isUploading}>{isUploading ? <Spinner className="h-4 w-4" /> : 'Envoyer'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+            <Button type="submit" disabled={isUploading}>{isUploading ? <Spinner className="h-4 w-4" /> : t('medicalFile.send')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1719,13 +1741,13 @@ function UploadPhotoDialog({ open, onOpenChange, patientId, onUploaded }: {
 // de l'utilisateur authentifié (jamais envoyé par le client).
 
 const FACT_TYPE_FIELD_LABELS: Record<string, { principal: string; champs: string[] }> = {
-  allergie: { principal: 'Substance / produit concerné', champs: ['substance', 'reaction'] },
-  traitement: { principal: 'Médicament / traitement', champs: ['medicament', 'posologie'] },
-  contre_indication: { principal: 'Contre-indication', champs: ['motif'] },
-  antecedent_medical: { principal: 'Description', champs: ['description'] },
-  antecedent_chirurgical: { principal: 'Intervention', champs: ['intervention', 'date_intervention'] },
-  antecedent_anesthesique: { principal: 'Description', champs: ['description'] },
-  antecedent_familial: { principal: 'Description', champs: ['description'] },
+  allergie: { principal: 'medicalFile.fieldSubstance', champs: ['substance', 'reaction'] },
+  traitement: { principal: 'medicalFile.fieldMedication', champs: ['medicament', 'posologie'] },
+  contre_indication: { principal: 'medicalFile.factTypeContreIndication', champs: ['motif'] },
+  antecedent_medical: { principal: 'medicalFile.fieldDescription', champs: ['description'] },
+  antecedent_chirurgical: { principal: 'medicalFile.fieldIntervention', champs: ['intervention', 'date_intervention'] },
+  antecedent_anesthesique: { principal: 'medicalFile.fieldDescription', champs: ['description'] },
+  antecedent_familial: { principal: 'medicalFile.fieldDescription', champs: ['description'] },
 };
 
 function MedicalFactDialog({
@@ -1739,6 +1761,7 @@ function MedicalFactDialog({
   patientId: number;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [typeFait, setTypeFait] = useState('allergie');
   const [valeurPrincipale, setValeurPrincipale] = useState('');
   const [champSecondaire, setChampSecondaire] = useState('');
@@ -1770,11 +1793,11 @@ function MedicalFactDialog({
         source: 'MANUAL',
         verification_status: verificationStatus as 'VERIFIED' | 'PENDING_VERIFICATION' | 'HISTORICAL_UNSTRUCTURED',
       });
-      toast.success('Fait médical enregistré');
+      toast.success(t('medicalFile.factSaved'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de l\'enregistrement');
+      toast.error(err.response?.data?.detail || t('medicalFile.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -1786,15 +1809,15 @@ function MedicalFactDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HeartPulse className="w-5 h-5" />
-            Nouveau fait médical structuré
+            {t('medicalFile.newFactTitle')}
           </DialogTitle>
           <DialogDescription>
-            Donnée chiffrée, journalisée dans l'audit médical et réservée au rôle médecin.
+            {t('medicalFile.newFactDesc')}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="type_fait">Type de fait médical</Label>
+            <Label htmlFor="type_fait">{t('medicalFile.factTypeLabel')}</Label>
             <select
               id="type_fait"
               value={typeFait}
@@ -1802,12 +1825,12 @@ function MedicalFactDialog({
               className="w-full h-9 px-3 border rounded-md text-sm"
             >
               {Object.entries(FACT_TYPE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
+                <option key={value} value={value}>{t(label)}</option>
               ))}
             </select>
           </div>
           <div>
-            <Label htmlFor="fait_principal">{config.principal}</Label>
+            <Label htmlFor="fait_principal">{t(config.principal)}</Label>
             <Input
               id="fait_principal"
               value={valeurPrincipale}
@@ -1819,7 +1842,7 @@ function MedicalFactDialog({
           {secondaryKey && (
             <div>
               <Label htmlFor="fait_secondaire">
-                {secondaryKey === 'reaction' ? 'Réaction observée' : secondaryKey === 'posologie' ? 'Posologie' : secondaryKey === 'date_intervention' ? 'Date de l\'intervention' : 'Précision'}
+                {secondaryKey === 'reaction' ? t('medicalFile.reactionObserved') : secondaryKey === 'posologie' ? t('medicalFile.dosage') : secondaryKey === 'date_intervention' ? t('medicalFile.interventionDate') : t('medicalFile.precision')}
               </Label>
               <Input
                 id="fait_secondaire"
@@ -1830,22 +1853,22 @@ function MedicalFactDialog({
             </div>
           )}
           <div>
-            <Label htmlFor="verification_status">Statut de vérification</Label>
+            <Label htmlFor="verification_status">{t('medicalFile.verificationStatus')}</Label>
             <select
               id="verification_status"
               value={verificationStatus}
               onChange={(e) => setVerificationStatus(e.target.value)}
               className="w-full h-9 px-3 border rounded-md text-sm"
             >
-              <option value="VERIFIED">Vérifié</option>
-              <option value="PENDING_VERIFICATION">À vérifier</option>
-              <option value="HISTORICAL_UNSTRUCTURED">Historique non structuré</option>
+              <option value="VERIFIED">{t('medicalFile.verified')}</option>
+              <option value="PENDING_VERIFICATION">{t('medicalFile.toVerify')}</option>
+              <option value="HISTORICAL_UNSTRUCTURED">{t('medicalFile.historicalUnstructured')}</option>
             </select>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? <Spinner className="h-4 w-4" /> : 'Enregistrer'}
+              {isSaving ? <Spinner className="h-4 w-4" /> : t('common.save')}
             </Button>
           </DialogFooter>
         </form>
@@ -1870,39 +1893,46 @@ function PrescriptionDialog({
   patientId: number;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation();
+  const [type, setType] = useState<'medicament' | 'analyse'>('medicament');
   const [medicament, setMedicament] = useState('');
   const [dosage, setDosage] = useState('');
   const [frequence, setFrequence] = useState('');
   const [duree, setDuree] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [analyse, setAnalyse] = useState('');
+  const [laboratoire, setLaboratoire] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setType('medicament');
       setMedicament('');
       setDosage('');
       setFrequence('');
       setDuree('');
       setInstructions('');
+      setAnalyse('');
+      setLaboratoire('');
     }
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!medicament.trim()) return;
+    if (type === 'medicament' && !medicament.trim()) return;
+    if (type === 'analyse' && !analyse.trim()) return;
     setIsSaving(true);
     try {
-      const details: Record<string, unknown> = { medicament: medicament.trim() };
-      if (dosage.trim()) details.dosage = dosage.trim();
-      if (frequence.trim()) details.frequence = frequence.trim();
-      if (duree.trim()) details.duree = duree.trim();
-      if (instructions.trim()) details.instructions = instructions.trim();
+      const details: Record<string, unknown> =
+        type === 'analyse'
+          ? { type: 'analyse', analyse: analyse.trim(), laboratoire: laboratoire.trim() || undefined, instructions: instructions.trim() || undefined }
+          : { type: 'medicament', medicament: medicament.trim(), dosage: dosage.trim() || undefined, frequence: frequence.trim() || undefined, duree: duree.trim() || undefined, instructions: instructions.trim() || undefined };
       await prescriptionsApi.create(patientId, { details, statut: 'ACTIVE' });
-      toast.success('Prescription enregistrée');
+      toast.success(type === 'analyse' ? t('medicalFile.analysisRequested') : t('medicalFile.prescriptionSaved'));
       onOpenChange(false);
       onCreated();
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur lors de l\'enregistrement');
+      toast.error(err.response?.data?.detail || t('medicalFile.saveError'));
     } finally {
       setIsSaving(false);
     }
@@ -1913,46 +1943,90 @@ function PrescriptionDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Pill className="w-5 h-5" />
-            Nouvelle prescription médicale
+            {type === 'analyse' ? <FlaskConical className="w-5 h-5" /> : <Pill className="w-5 h-5" />}
+            {type === 'analyse' ? t('medicalFile.requestAnalysis') : t('medicalFile.newPrescriptionTitle')}
           </DialogTitle>
           <DialogDescription>
-            Prescription chiffrée, journalisée dans l'audit médical et réservée au rôle médecin.
+            {type === 'analyse' ? t('medicalFile.analysisDesc') : t('medicalFile.prescriptionDesc')}
           </DialogDescription>
         </DialogHeader>
+        <div className="flex gap-1 rounded-md bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => setType('medicament')}
+            className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${type === 'medicament' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+          >
+            <Pill className="w-3.5 h-3.5 inline mr-1" /> {t('medicalFile.medicationTab')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setType('analyse')}
+            className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${type === 'analyse' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+          >
+            <FlaskConical className="w-3.5 h-3.5 inline mr-1" /> {t('medicalFile.analysisTab')}
+          </button>
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="presc_medicament">Médicament / produit *</Label>
-            <Input
-              id="presc_medicament"
-              value={medicament}
-              onChange={(e) => setMedicament(e.target.value)}
-              required
-              className="w-full"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+          {type === 'medicament' ? (
+            <>
+              <div>
+                <Label htmlFor="presc_medicament">{t('medicalFile.medicationProduct')}</Label>
+                <Input
+                  id="presc_medicament"
+                  value={medicament}
+                  onChange={(e) => setMedicament(e.target.value)}
+                  required
+                  className="w-full"
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="presc_dosage">{t('medicalFile.dosage')}</Label>
+                  <Input id="presc_dosage" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder={t('medicalFile.dosageExample')} className="w-full" />
+                </div>
+                <div>
+                  <Label htmlFor="presc_frequence">{t('medicalFile.frequency')}</Label>
+                  <Input id="presc_frequence" value={frequence} onChange={(e) => setFrequence(e.target.value)} placeholder={t('medicalFile.frequencyExample')} className="w-full" />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="presc_duree">{t('medicalFile.duration')}</Label>
+                <Input id="presc_duree" value={duree} onChange={(e) => setDuree(e.target.value)} placeholder={t('medicalFile.durationExample')} className="w-full" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="presc_analyse">{t('medicalFile.analysesRequested')}</Label>
+                <Textarea
+                  id="presc_analyse"
+                  value={analyse}
+                  onChange={(e) => setAnalyse(e.target.value)}
+                  placeholder={t('medicalFile.analysesPlaceholder')}
+                  required
+                  rows={4}
+                  className="w-full"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">{t('medicalFile.oneAnalysisPerLine')}</p>
+              </div>
+              <div>
+                <Label htmlFor="presc_labo">{t('medicalFile.laboratoryOptional')}</Label>
+                <Input id="presc_labo" value={laboratoire} onChange={(e) => setLaboratoire(e.target.value)} placeholder={t('medicalFile.labExample')} className="w-full" />
+              </div>
+            </>
+          )}
+          {type === 'medicament' && (
             <div>
-              <Label htmlFor="presc_dosage">Dosage</Label>
-              <Input id="presc_dosage" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="ex : 10 mg" className="w-full" />
+              <Label htmlFor="presc_instructions">{t('medicalFile.instructions')}</Label>
+              <Textarea id="presc_instructions" value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3} className="w-full" />
             </div>
-            <div>
-              <Label htmlFor="presc_frequence">Fréquence</Label>
-              <Input id="presc_frequence" value={frequence} onChange={(e) => setFrequence(e.target.value)} placeholder="ex : 1/jour" className="w-full" />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="presc_duree">Durée</Label>
-            <Input id="presc_duree" value={duree} onChange={(e) => setDuree(e.target.value)} placeholder="ex : 7 jours" className="w-full" />
-          </div>
-          <div>
-            <Label htmlFor="presc_instructions">Instructions</Label>
-            <Textarea id="presc_instructions" value={instructions} onChange={(e) => setInstructions(e.target.value)} rows={3} className="w-full" />
-          </div>
+          )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? <Spinner className="h-4 w-4" /> : 'Enregistrer'}
+              {isSaving ? <Spinner className="h-4 w-4" /> : t('common.save')}
             </Button>
           </DialogFooter>
         </form>

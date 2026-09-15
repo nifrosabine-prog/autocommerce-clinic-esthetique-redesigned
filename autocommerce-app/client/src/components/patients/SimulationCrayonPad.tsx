@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Eraser, Pencil, RotateCcw } from 'lucide-react';
@@ -8,7 +9,9 @@ interface SimulationCrayonPadProps {
   onCancel: () => void;
 }
 
-export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCrayonPadProps) {
+export function SimulationCrayonPad({
+  imageUrl, onSave, onCancel }: SimulationCrayonPadProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -116,7 +119,7 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
     <div className="flex flex-col items-center gap-4 py-4">
       <div className="relative border rounded-lg overflow-hidden bg-slate-200 shadow-inner" style={{ width: canvasReady ? canvasRef.current?.width : undefined }}>
         {/* Image de fond (pour voir ce qu'on dessine) */}
-        <img src={imageUrl} alt="Background" className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-100" />
+        <img src={imageUrl} alt={t('componentUi.background')} className="absolute inset-0 w-full h-full object-cover pointer-events-none opacity-100" />
         
         {/* Canvas de dessin (couche de masque) */}
         <canvas
@@ -137,40 +140,43 @@ export function SimulationCrayonPad({ imageUrl, onSave, onCancel }: SimulationCr
           <Button 
             variant={mode === 'draw' ? 'default' : 'ghost'} 
             size="sm" 
+            type="button"
             onClick={() => setMode('draw')}
             className="rounded-full"
           >
-            <Pencil className="w-4 h-4 mr-2" /> Dessiner
+            <Pencil className="w-4 h-4 mr-2" /> {t('componentUi.draw')}
           </Button>
           <Button 
             variant={mode === 'erase' ? 'default' : 'ghost'} 
             size="sm" 
+            type="button"
             onClick={() => setMode('erase')}
             className="rounded-full"
           >
-            <Eraser className="w-4 h-4 mr-2" /> Gommer
+            <Eraser className="w-4 h-4 mr-2" /> {t('componentUi.erase')}
           </Button>
         </div>
 
         <div className="flex items-center gap-2 flex-1 min-w-[120px]">
-          <span className="text-xs font-medium text-muted-foreground">Taille</span>
+          <span className="text-xs font-medium text-muted-foreground">{t('componentUi.size')}</span>
           <input 
             type="range" 
             min="5" max="80" 
             value={brushSize} 
             onChange={(e) => setBrushSize(parseInt(e.target.value))}
+            aria-label={t('componentUi.brushSizeLabel')}
             className="flex-1"
           />
         </div>
 
-        <Button variant="ghost" size="sm" onClick={handleReset} className="rounded-full">
+        <Button type="button" variant="ghost" size="sm" onClick={handleReset} aria-label={t('componentUi.resetDrawing')} className="rounded-full">
           <RotateCcw className="w-4 h-4" />
         </Button>
       </div>
 
       <div className="flex gap-3 w-full max-w-md pt-2">
-        <Button variant="outline" className="flex-1" onClick={onCancel}>Annuler</Button>
-        <Button className="flex-1" onClick={handleExport} disabled={!canvasReady || !hasMark}>Valider le marquage</Button>
+        <Button variant="outline" className="flex-1" onClick={onCancel}>{t('componentUi.cancel')}</Button>
+        <Button className="flex-1" onClick={handleExport} disabled={!canvasReady || !hasMark}>{t('componentUi.validateMarking')}</Button>
       </div>
     </div>
   );

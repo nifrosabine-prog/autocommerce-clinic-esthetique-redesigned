@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,6 +53,7 @@ import { equipeApi, EquipeMessage, EquipeMember } from '@/lib/api';
 // ── Composant principal ──────────────────────────────────────
 
 export default function EquipeMessages() {
+  const { t, i18n } = useTranslation();
   const [tab, setTab] = useState<'inbox' | 'sent'>('inbox');
   const [messages, setMessages] = useState<EquipeMessage[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -90,8 +92,8 @@ export default function EquipeMessages() {
         setMessages(res.data);
       }
     } catch {
-      setError('Impossible de charger les messages.');
-      toast.error('Erreur lors du chargement des messages');
+      setError(t('equipe.loadError'));
+      toast.error(t('equipe.loadErrorToast'));
     } finally {
       setIsLoading(false);
     }
@@ -112,7 +114,7 @@ export default function EquipeMessages() {
       setUtilisateurs(response.data);
     } catch {
       setUtilisateurs([]);
-      toast.error('Impossible de charger les membres de l’équipe');
+      toast.error(t('equipe.membersError'));
     }
   };
 
@@ -129,7 +131,7 @@ export default function EquipeMessages() {
 
   const handleSend = async () => {
     if (selectedDestinataireIds.length === 0 || !sujet.trim() || !contenu.trim()) {
-      toast.error('Tous les champs sont obligatoires');
+      toast.error(t('equipe.fieldsRequired'));
       return;
     }
     setIsSending(true);
@@ -140,7 +142,7 @@ export default function EquipeMessages() {
         sujet: sujet.trim(),
         contenu: contenu.trim(),
       });
-      toast.success('Message envoyé avec succès');
+      toast.success(t('equipe.sent'));
       setComposeOpen(false);
       setSelectedDestinataireIds([]);
       setRecipientSearch('');
@@ -150,7 +152,7 @@ export default function EquipeMessages() {
       loadMessages();
       loadUnread();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Erreur lors de l\'envoi');
+      toast.error(err?.response?.data?.detail || t('equipe.sendError'));
     } finally {
       setIsSending(false);
     }
@@ -176,7 +178,7 @@ export default function EquipeMessages() {
     if (!deleteId) return;
     try {
       await equipeApi.delete(deleteId);
-      toast.success('Message supprimé');
+      toast.success(t('equipe.deleted'));
       setDeleteOpen(false);
       setDeleteId(null);
       setReadOpen(false);
@@ -184,7 +186,7 @@ export default function EquipeMessages() {
       loadMessages();
       loadUnread();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Erreur lors de la suppression');
+      toast.error(err?.response?.data?.detail || t('equipe.deleteError'));
     }
   };
 
@@ -197,7 +199,7 @@ export default function EquipeMessages() {
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
+    return new Date(dateStr).toLocaleString(i18n.language, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -212,14 +214,14 @@ export default function EquipeMessages() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Messagerie Équipe</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{t('equipe.title')}</h1>
             <p className="text-muted-foreground">
-              Communication interne entre les membres de la clinique
+              {t('equipe.subtitle')}
             </p>
           </div>
           <Button onClick={() => { void loadUtilisateurs(); setIdempotencyKey(window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`); setComposeOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
-            Nouveau message
+            {t('equipe.newMessage')}
           </Button>
         </div>
 
@@ -230,7 +232,7 @@ export default function EquipeMessages() {
               {unreadCount > 0 ? (
                 <>
                   <Mail className="w-4 h-4 mr-2" />
-                  Boîte de réception
+                  {t('equipe.inbox')}
                   <Badge variant="destructive" className="ml-2 h-5 min-w-[20px] px-1">
                     {unreadCount}
                   </Badge>
@@ -238,13 +240,13 @@ export default function EquipeMessages() {
               ) : (
                 <>
                   <MailOpen className="w-4 h-4 mr-2" />
-                  Boîte de réception
+                  {t('equipe.inbox')}
                 </>
               )}
             </TabsTrigger>
             <TabsTrigger value="sent">
               <Send className="w-4 h-4 mr-2" />
-              Envoyés
+              {t('equipe.sentTab')}
             </TabsTrigger>
           </TabsList>
 
@@ -262,7 +264,7 @@ export default function EquipeMessages() {
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Mail className="w-12 h-12 mb-4 opacity-30" />
-                    <p>Aucun message {tab === 'inbox' ? 'reçu' : 'envoyé'}</p>
+                    <p>{t(tab === 'inbox' ? 'equipe.noMessageReceived' : 'equipe.noMessageSent')}</p>
                   </div>
                 ) : (
                   <Table>
@@ -270,18 +272,18 @@ export default function EquipeMessages() {
                       <TableRow>
                         {tab === 'inbox' ? (
                           <>
-                            <TableHead>De</TableHead>
-                            <TableHead>Sujet</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead className="w-[100px]">Actions</TableHead>
+                            <TableHead>{t('equipe.from')}</TableHead>
+                            <TableHead>{t('equipe.subject')}</TableHead>
+                            <TableHead>{t('equipe.date')}</TableHead>
+                            <TableHead className="w-[100px]">{t('equipe.actions')}</TableHead>
                           </>
                         ) : (
                           <>
-                            <TableHead>À</TableHead>
-                            <TableHead>Sujet</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Statut</TableHead>
-                            <TableHead className="w-[100px]">Actions</TableHead>
+                            <TableHead>{t('equipe.to')}</TableHead>
+                            <TableHead>{t('equipe.subject')}</TableHead>
+                            <TableHead>{t('equipe.date')}</TableHead>
+                            <TableHead>{t('equipe.status')}</TableHead>
+                            <TableHead className="w-[100px]">{t('equipe.actions')}</TableHead>
                           </>
                         )}
                       </TableRow>
@@ -316,7 +318,7 @@ export default function EquipeMessages() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleRead(msg)}
-                                    title="Lire"
+                                    title={t('equipe.read')}
                                   >
                                     <Eye className="w-4 h-4" />
                                   </Button>
@@ -324,7 +326,7 @@ export default function EquipeMessages() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleOpenDelete(msg.id)}
-                                    title="Supprimer"
+                                    title={t('equipe.delete')}
                                   >
                                     <Trash2 className="w-4 h-4 text-red-500" />
                                   </Button>
@@ -344,7 +346,7 @@ export default function EquipeMessages() {
                               </TableCell>
                               <TableCell>
                                 <Badge variant={msg.lu ? 'default' : 'secondary'}>
-                                  {msg.lu ? 'Lu' : 'Non lu'}
+                                  {msg.lu ? t('equipe.readBadge') : t('equipe.unreadBadge')}
                                 </Badge>
                               </TableCell>
                               <TableCell>
@@ -353,7 +355,7 @@ export default function EquipeMessages() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleRead(msg)}
-                                    title="Voir"
+                                    title={t('equipe.view')}
                                   >
                                     <Eye className="w-4 h-4" />
                                   </Button>
@@ -361,7 +363,7 @@ export default function EquipeMessages() {
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => handleOpenDelete(msg.id)}
-                                    title="Supprimer"
+                                    title={t('equipe.delete')}
                                   >
                                     <Trash2 className="w-4 h-4 text-red-500" />
                                   </Button>
@@ -384,24 +386,24 @@ export default function EquipeMessages() {
       <Dialog open={composeOpen} onOpenChange={setComposeOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Nouveau message</DialogTitle>
+            <DialogTitle>{t('equipe.newMessage')}</DialogTitle>
                           <DialogDescription>
-              Envoyez un message à un ou plusieurs membres actifs de l'équipe.
+              {t('equipe.composeDesc')}
             </DialogDescription>
 
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="destinataire-search">Destinataires ({selectedDestinataireIds.length})</Label>
+                <Label htmlFor="destinataire-search">{t('equipe.recipients', { total: selectedDestinataireIds.length })}</Label>
                 <div className="flex gap-2 text-xs">
-                  <button type="button" className="text-primary hover:underline" onClick={() => setSelectedDestinataireIds(utilisateurs.map((member) => member.id))}>Toute l’équipe</button>
-                  <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedDestinataireIds([])}>Tout désélectionner</button>
+                  <button type="button" className="text-primary hover:underline" onClick={() => setSelectedDestinataireIds(utilisateurs.map((member) => member.id))}>{t('equipe.wholeTeam')}</button>
+                  <button type="button" className="text-muted-foreground hover:underline" onClick={() => setSelectedDestinataireIds([])}>{t('equipe.deselectAll')}</button>
                 </div>
               </div>
               <Input
                 id="destinataire-search"
-                placeholder="Rechercher un membre..."
+                placeholder={t('equipe.searchMember')}
                 value={recipientSearch}
                 onChange={(e) => setRecipientSearch(e.target.value)}
               />
@@ -417,24 +419,24 @@ export default function EquipeMessages() {
                       <span className="text-sm">{member.prenom} {member.nom} — {member.role} ({member.email})</span>
                     </label>
                   ))}
-                {utilisateurs.length === 0 && <p className="text-xs text-muted-foreground px-2 py-1">Aucun autre membre actif disponible.</p>}
+                {utilisateurs.length === 0 && <p className="text-xs text-muted-foreground px-2 py-1">{t('equipe.noOtherMember')}</p>}
               </div>
-              {selectedDestinataireIds.length > 0 && <p className="text-xs text-muted-foreground">Sélectionnés : {utilisateurs.filter((member) => selectedDestinataireIds.includes(member.id)).map((member) => `${member.prenom} ${member.nom}`).join(', ')}</p>}
+              {selectedDestinataireIds.length > 0 && <p className="text-xs text-muted-foreground">{t('equipe.selected')} : {utilisateurs.filter((member) => selectedDestinataireIds.includes(member.id)).map((member) => `${member.prenom} ${member.nom}`).join(', ')}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sujet">Sujet</Label>
+              <Label htmlFor="sujet">{t('equipe.subjectLabel')}</Label>
               <Input
                 id="sujet"
-                placeholder="Objet du message"
+                placeholder={t('equipe.subjectPlaceholder')}
                 value={sujet}
                 onChange={(e) => setSujet(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="contenu">Message</Label>
+              <Label htmlFor="contenu">{t('equipe.messageLabel')}</Label>
               <Textarea
                 id="contenu"
-                placeholder="Rédigez votre message..."
+                placeholder={t('equipe.messagePlaceholder')}
                 rows={6}
                 value={contenu}
                 onChange={(e) => setContent(e.target.value)}
@@ -443,11 +445,11 @@ export default function EquipeMessages() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setComposeOpen(false)}>
-              Annuler
+              {t('equipe.cancel')}
             </Button>
             <Button onClick={handleSend} disabled={isSending || selectedDestinataireIds.length === 0}>
               {isSending ? <Spinner className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Envoyer
+              {t('equipe.send')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -463,11 +465,11 @@ export default function EquipeMessages() {
                 <DialogDescription>
                   {tab === 'inbox' ? (
                     <>
-                      De : <strong>{selectedMessage.expediteur_prenom} {selectedMessage.expediteur_nom}</strong>
+                      {t('equipe.fromLabel')} <strong>{selectedMessage.expediteur_prenom} {selectedMessage.expediteur_nom}</strong>
                     </>
                   ) : (
                     <>
-                      À : <strong>{selectedMessage.destinataire_prenom} {selectedMessage.destinataire_nom}</strong>
+                      {t('equipe.toLabel')} <strong>{selectedMessage.destinataire_prenom} {selectedMessage.destinataire_nom}</strong>
                     </>
                   )}
                   {' '}&mdash; {formatDate(selectedMessage.cree_a)}
@@ -475,7 +477,7 @@ export default function EquipeMessages() {
                     <>
                       <br />
                       <span className="text-xs text-muted-foreground">
-                        Lu le {formatDate(selectedMessage.lu_a)}
+                        {t('equipe.readOn', { date: formatDate(selectedMessage.lu_a) })}
                       </span>
                     </>
                   )}
@@ -493,9 +495,9 @@ export default function EquipeMessages() {
                   }}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
-                  Supprimer
+                  {t('equipe.deleteButton')}
                 </Button>
-                <Button onClick={() => setReadOpen(false)}>Fermer</Button>
+                <Button onClick={() => setReadOpen(false)}>{t('equipe.close')}</Button>
               </DialogFooter>
             </>
           )}
@@ -506,15 +508,15 @@ export default function EquipeMessages() {
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer ce message ?</AlertDialogTitle>
+            <AlertDialogTitle>{t('equipe.confirmDeleteTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action est irréversible. Le message sera définitivement supprimé.
+              {t('equipe.confirmDeleteDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogCancel>{t('equipe.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Supprimer
+              {t('equipe.deleteButton')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,6 +57,7 @@ interface AtRiskPatient {
 
 export default function CopiloteCRM() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [selectedPatientId, setSelectedPatientId] = useState<number | null>(() => {
     const stored = Number(sessionStorage.getItem('copilote-selected-patient'));
     return Number.isFinite(stored) && stored > 0 ? stored : null;
@@ -78,7 +80,7 @@ export default function CopiloteCRM() {
         sessionStorage.setItem('copilote-selected-patient', String(patientId));
       }
     } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement du résumé');
+      setError(err.message || t('crm.loadSummaryError'));
     } finally {
       setIsLoading(false);
     }
@@ -102,19 +104,19 @@ export default function CopiloteCRM() {
           const riskLevel = riskScore >= 80 ? 'critical' : riskScore >= 50 ? 'high' : 'medium';
           return {
             patient_id: item.id,
-            patient_name: item.name?.trim() || `Patient #${item.id}`,
+            patient_name: item.name?.trim() || t('crm.patientFallback', { id: item.id }),
             risk_score: riskScore,
             risk_level: riskLevel,
             reasons: [
               daysSinceVisit === null
-                ? 'Aucune visite enregistrée'
-                : `Dernière visite il y a ${daysSinceVisit} jour${daysSinceVisit > 1 ? 's' : ''}`,
+                ? t('crm.noVisit')
+                : t('crm.lastVisitDays', { days: daysSinceVisit }),
             ],
           };
         }));
       }
     } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement des patients à risque');
+      setError(err.message || t('crm.loadAtRiskError'));
     } finally {
       setIsLoading(false);
     }
@@ -122,7 +124,7 @@ export default function CopiloteCRM() {
 
   const generateDraft = async (channel: 'whatsapp' | 'email') => {
     if (!selectedPatientId) {
-      setError('Sélectionnez d’abord un patient dans Résumé Patient.');
+      setError(t('crm.selectPatientFirst'));
       return;
     }
     try {
@@ -132,7 +134,7 @@ export default function CopiloteCRM() {
       const response = await api.get(`/copilote-crm/patient/${selectedPatientId}/${endpoint}`);
       setDraft(response.data?.data ?? null);
     } catch (err: any) {
-      setError(err.message || `Erreur lors de la génération du brouillon ${channel}`);
+      setError(err.message || t('crm.draftError', { channel }));
     } finally {
       setIsLoading(false);
     }
@@ -161,8 +163,8 @@ export default function CopiloteCRM() {
       <div className="space-y-6">
         {/* Titre */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Copilote CRM</h1>
-          <p className="text-gray-600 mt-2">Assistant intelligent pour la gestion des patients</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('crm.title')}</h1>
+          <p className="text-gray-600 mt-2">{t('crm.subtitle')}</p>
         </div>
 
         {/* Erreur */}
@@ -188,7 +190,7 @@ export default function CopiloteCRM() {
             }`}
           >
             <FileText className="w-4 h-4 inline mr-2" />
-            Résumé Patient
+            {t('crm.tabSummary')}
           </button>
           <button
             onClick={() => setActiveTab('at-risk')}
@@ -199,7 +201,7 @@ export default function CopiloteCRM() {
             }`}
           >
             <AlertCircle className="w-4 h-4 inline mr-2" />
-            Patients à Risque ({atRiskPatients.length})
+            {t('crm.tabAtRisk', { total: atRiskPatients.length })}
           </button>
           <button
             onClick={() => setActiveTab('draft')}
@@ -210,7 +212,7 @@ export default function CopiloteCRM() {
             }`}
           >
             <MessageSquare className="w-4 h-4 inline mr-2" />
-            Brouillons
+            {t('crm.tabDrafts')}
           </button>
         </div>
 
@@ -220,13 +222,13 @@ export default function CopiloteCRM() {
             {/* Recherche patient */}
             <Card>
               <CardHeader>
-                <CardTitle>Rechercher un patient</CardTitle>
+                <CardTitle>{t('crm.searchPatient')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    placeholder="ID du patient"
+                    placeholder={t('crm.patientIdPlaceholder')}
                     className="flex-1 px-3 py-2 border rounded-lg"
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
@@ -259,16 +261,16 @@ export default function CopiloteCRM() {
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-gray-600">Téléphone</p>
-                        <p className="font-medium">{patientSummary.data.patient.telephone || 'Non renseigné'}</p>
+                        <p className="text-sm text-gray-600">{t('crm.phone')}</p>
+                        <p className="font-medium">{patientSummary.data.patient.telephone || t('crm.notProvided')}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Email</p>
-                        <p className="font-medium">{patientSummary.data.patient.email || 'Non renseigné'}</p>
+                        <p className="text-sm text-gray-600">{t('crm.email')}</p>
+                        <p className="font-medium">{patientSummary.data.patient.email || t('crm.notProvided')}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Notes</p>
-                        <p className="font-medium">{patientSummary.data.patient.notes || 'Aucune note'}</p>
+                        <p className="text-sm text-gray-600">{t('crm.notes')}</p>
+                        <p className="font-medium">{patientSummary.data.patient.notes || t('crm.noNote')}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -279,22 +281,22 @@ export default function CopiloteCRM() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileText className="w-5 h-5" />
-                      Historique Médical
+                      {t('crm.medicalHistory')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-sm text-gray-600">Total d'actes</p>
+                        <p className="text-sm text-gray-600">{t('crm.totalActes')}</p>
                         <p className="text-2xl font-bold">{totalActes}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600 mb-2">Actes effectués</p>
+                        <p className="text-sm text-gray-600 mb-2">{t('crm.actesPerformed')}</p>
                         <div className="space-y-1">
                           {Object.entries(patientSummary.data.actes_summary).map(([acte, data]: any) => (
                             <div key={acte} className="text-sm">
                               <span className="font-medium">{acte}</span>
-                              <span className="text-gray-600"> - {data.count} fois</span>
+                              <span className="text-gray-600"> - {data.count} {t('crm.times')}</span>
                               {data.avg_satisfaction && (
                                 <span className="text-yellow-600"> - ⭐ {data.avg_satisfaction.toFixed(1)}</span>
                               )}
@@ -311,25 +313,25 @@ export default function CopiloteCRM() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Clock className="w-5 h-5" />
-                      Rendez-vous
+                      {t('crm.appointments')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <p className="text-sm text-gray-600">Total</p>
+                        <p className="text-sm text-gray-600">{t('crm.total')}</p>
                         <p className="text-2xl font-bold">{patientSummary.data.rdvs.total}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Complétés</p>
+                        <p className="text-sm text-gray-600">{t('crm.completed')}</p>
                         <p className="text-2xl font-bold text-green-600">{patientSummary.data.rdvs.completed}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Annulés</p>
+                        <p className="text-sm text-gray-600">{t('crm.cancelled')}</p>
                         <p className="text-2xl font-bold text-orange-600">{patientSummary.data.rdvs.cancelled}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">No-show</p>
+                        <p className="text-sm text-gray-600">{t('crm.noShow')}</p>
                         <p className="text-2xl font-bold text-red-600">{patientSummary.data.rdvs.no_show}</p>
                       </div>
                     </div>
@@ -339,16 +341,16 @@ export default function CopiloteCRM() {
                 {/* Finances */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Finances</CardTitle>
+                    <CardTitle>{t('crm.finances')}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-gray-600">Factures</p>
+                        <p className="text-sm text-gray-600">{t('crm.invoices')}</p>
                         <p className="text-2xl font-bold">{patientSummary.data.factures.count}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Séries photos</p>
+                        <p className="text-sm text-gray-600">{t('crm.photoSeries')}</p>
                         <p className="text-2xl font-bold text-blue-600">{patientSummary.data.photos.series_count}</p>
                       </div>
                     </div>
@@ -365,7 +367,7 @@ export default function CopiloteCRM() {
             {atRiskPatients.length === 0 ? (
               <Card>
                 <CardContent className="pt-12 pb-12 text-center">
-                  <p className="text-gray-500">Aucun patient à risque détecté</p>
+                  <p className="text-gray-500">{t('crm.noAtRisk')}</p>
                 </CardContent>
               </Card>
             ) : (
@@ -384,7 +386,7 @@ export default function CopiloteCRM() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <p className="font-bold text-lg">{patient.patient_name}</p>
-                        <p className="text-sm text-gray-600 mt-1">Score de risque: {patient.risk_score}/100</p>
+                        <p className="text-sm text-gray-600 mt-1">{t('crm.riskScore', { score: patient.risk_score })}</p>
                         <div className="mt-2 space-y-1">
                           {patient.reasons.map((reason, idx) => (
                             <p key={idx} className="text-sm text-gray-700">• {reason}</p>
@@ -400,7 +402,7 @@ export default function CopiloteCRM() {
                             : 'bg-yellow-200 text-yellow-800'
                         }`}
                       >
-                        {patient.risk_level.toUpperCase()}
+                        {t(`crm.risk_${patient.risk_level}`)}
                       </span>
                     </div>
                     <button
@@ -411,7 +413,7 @@ export default function CopiloteCRM() {
                       }}
                       className="mt-4 px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                     >
-                      Voir le dossier
+                      {t('crm.viewFile')}
                     </button>
                   </CardContent>
                 </Card>
@@ -424,28 +426,28 @@ export default function CopiloteCRM() {
         {activeTab === 'draft' && (
           <Card>
             <CardHeader>
-              <CardTitle>Brouillons de messages</CardTitle>
+              <CardTitle>{t('crm.draftsTitle')}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-gray-600">
-                Les brouillons de messages WhatsApp et email apparaîtront ici une fois qu'un patient sera sélectionné.
+                {t('crm.draftsEmpty')}
               </p>
               {selectedPatientId && (
                 <div className="mt-4 space-y-4">
                   <button onClick={() => void generateDraft('whatsapp')} disabled={isLoading} className="w-full px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center gap-2 disabled:opacity-50">
                     <MessageSquare className="w-4 h-4" />
-                    Générer brouillon WhatsApp
+                    {t('crm.generateWhatsapp')}
                   </button>
                   <button onClick={() => void generateDraft('email')} disabled={isLoading} className="w-full px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2 disabled:opacity-50">
                     <Mail className="w-4 h-4" />
-                    Générer brouillon Email
+                    {t('crm.generateEmail')}
                   </button>
                   {draft && (
                     <div className="rounded-lg border bg-white p-4 space-y-2">
-                      <p className="text-sm font-semibold">Brouillon {draft.channel}</p>
-                      {draft.subject && <p className="text-sm"><strong>Objet :</strong> {draft.subject}</p>}
-                      <p className="whitespace-pre-wrap text-sm text-gray-700">{draft.body || draft.content || 'Brouillon généré sans contenu.'}</p>
-                      <p className="text-xs text-gray-500">Brouillon uniquement — aucun message n’a été envoyé.</p>
+                      <p className="text-sm font-semibold">{t('crm.draftChannel', { channel: draft.channel })}</p>
+                      {draft.subject && <p className="text-sm"><strong>{t('crm.subjectLabel')}</strong> {draft.subject}</p>}
+                      <p className="whitespace-pre-wrap text-sm text-gray-700">{draft.body || draft.content || t('crm.draftNoContent')}</p>
+                      <p className="text-xs text-gray-500">{t('crm.draftOnly')}</p>
                     </div>
                   )}
                 </div>

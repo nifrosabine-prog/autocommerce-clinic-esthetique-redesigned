@@ -62,33 +62,22 @@ const getBookingPeriod = (slot: PublicDisponibilite): Exclude<BookingPeriod, ''>
   return hour < 12 ? 'matin' : 'apres_midi';
 };
 
-const periodLabel = (period: Exclude<BookingPeriod, ''>, slots: PublicDisponibilite[]) => {
-  const periodSlots = slots.filter((slot) => getBookingPeriod(slot) === period);
-  if (periodSlots.length === 0) return period === 'matin' ? 'Matin — indisponible' : 'Après-midi — indisponible';
-  const first = periodSlots[0].heure;
-  const last = periodSlots[periodSlots.length - 1].heure;
-  return period === 'matin' ? `Matin (${first}–${last})` : `Après-midi (${first}–${last})`;
-};
-
 const MBA_LOGO_URL = '/branding/mba-clinic-monogram.png';
 const MBA_HERO_URL = '/branding/mba-clinic-waiting-room.jpg';
 const SERVICE_IMAGES = ['/branding/consultation-esthetique.jpg', '/branding/soin-visage-premium.jpg', '/branding/injection-esthetique.jpg'];
-const SERVICE_DETAILS = [
-  { title: 'Consultation esthétique', description: 'Un premier échange médical pour comprendre vos attentes, analyser votre peau et construire un parcours réaliste, naturel et personnalisé.', points: ['Écoute et analyse personnalisées', 'Recommandations transparentes', 'Plan de soins adapté à votre rythme'] },
-  { title: 'Soin visage premium', description: 'Un soin expert pensé pour raviver l’éclat, hydrater et apaiser la peau dans un cadre calme, précis et confortable.', points: ['Diagnostic de peau', 'Gestes doux et produits sélectionnés', 'Conseils simples pour prolonger les effets'] },
-  { title: 'Injection esthétique', description: 'Une approche médicale mesurée, fondée sur l’équilibre des volumes et la recherche d’un résultat subtil, sans promesse irréaliste.', points: ['Évaluation médicale préalable', 'Protocole expliqué étape par étape', 'Suivi après le soin'] },
-];
-
 export default function LandingPage() {
   const { branding: privateBranding } = useBranding();
   const { t, i18n } = useTranslation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [expandedService, setExpandedService] = useState<number | null>(null);
-  const language = ((i18n.resolvedLanguage || i18n.language || 'fr').split('-')[0] as LandingLanguage);
-  const copy = LANDING_TRANSLATIONS[language] || LANDING_TRANSLATIONS.fr;
-  const formCopy = LANDING_FORM[language] || LANDING_FORM.fr;
-  const extraCopy = LANDING_EXTRA[language] || LANDING_EXTRA.fr;
-  const isEnglish = language === 'en';
+  const resolvedLanguage = (i18n.resolvedLanguage || i18n.language || 'fr').split('-')[0];
+  const language: LandingLanguage = ['fr', 'en', 'de', 'it', 'ar'].includes(resolvedLanguage)
+    ? resolvedLanguage as LandingLanguage
+    : 'fr';
+  const copy = LANDING_TRANSLATIONS[language];
+  const formCopy = LANDING_FORM[language];
+  const extraCopy = LANDING_EXTRA[language];
+  const serviceCopy = LANDING_SERVICES[language];
 
   useEffect(() => {
     const isArabic = language === 'ar';
@@ -111,16 +100,17 @@ export default function LandingPage() {
     : 'MBA Clinic';
   const clinicPhone = landingContent?.telephone || '';
   const clinicWhatsapp = landingContent?.whatsapp || '';
-  const clinicCity = landingContent?.ville || (language === 'fr' ? 'Adresse communiquée par la clinique' : 'Clinic address to be configured');
+  const clinicCity = landingContent?.ville || t('componentUi.tunis');
+  const clinicAddress = landingContent?.adresse || t('componentUi.clinicAddressFallback', { city: clinicCity });
   const heroImage = landingContent?.photo_hero_url || MBA_HERO_URL;
   const heroTitle = !landingContent?.titre || landingContent.titre === 'Bienvenue'
-    ? 'L’art de révéler votre beauté naturelle.'
+    ? t('componentUi.landingHeroTitle')
     : landingContent.titre;
   const heroSubtitle = !landingContent?.sous_titre || landingContent.sous_titre === 'Votre clinique esthétique de confiance'
-    ? 'Une médecine esthétique précise, douce et personnalisée au cœur de Tunis.'
+    ? t('componentUi.landingHeroSubtitle', { city: t('componentUi.tunis') })
     : landingContent.sous_titre;
   const [availabilities, setAvailabilities] = useState<PublicDisponibilite[]>([]);
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapError, setBootstrapError] = useState(false);
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -161,7 +151,7 @@ export default function LandingPage() {
 
         setPraticiens(praticiensResponse.data);
         setActes(actesResponse.data);
-        setBootstrapError(null);
+        setBootstrapError(false);
 
         // Le contenu marketing est chargé en arrière-plan : il ne doit jamais
         // bloquer l'ouverture immédiate du formulaire public.
@@ -177,7 +167,7 @@ export default function LandingPage() {
           });
       } catch (err) {
         console.error('Failed to bootstrap landing page:', err);
-        setBootstrapError('Le module de réservation est temporairement indisponible.');
+        setBootstrapError(true);
       } finally {
         setIsBootstrapLoading(false);
       }
@@ -206,7 +196,7 @@ export default function LandingPage() {
           const nextDate = nextBusinessDate(formData.date);
           setAvailabilities([]);
           setFormData((current) => ({ ...current, date: nextDate, date_heure: '', periode: '' }));
-          toast.info('Aucun créneau restant aujourd’hui. Nous vous proposons le prochain jour ouvré.');
+          toast.info(t('componentUi.noSlotsToday'));
           return;
         }
 
@@ -225,7 +215,7 @@ export default function LandingPage() {
         console.error('Failed to load availabilities:', err);
         setAvailabilities([]);
         setFormData((current) => ({ ...current, date_heure: '' }));
-        const message = err.response?.data?.detail || 'Impossible de charger les disponibilités';
+        const message = err.response?.data?.detail || t('componentUi.availabilityLoadError');
         toast.error(message);
       } finally {
         setIsSlotsLoading(false);
@@ -238,8 +228,20 @@ export default function LandingPage() {
   const featuredServices = useMemo(() => {
     const fromBranding = effectiveBranding?.contenu_landing?.services_mis_en_avant || [];
     if (fromBranding.length > 0) return fromBranding;
-    return actes.slice(0, 3).map((acte) => acte.nom);
-  }, [effectiveBranding?.contenu_landing?.services_mis_en_avant, actes]);
+    const fromActs = actes.slice(0, 3).map((acte) => acte.nom);
+    return fromActs.length > 0 ? fromActs : [...serviceCopy.titles];
+  }, [effectiveBranding?.contenu_landing?.services_mis_en_avant, actes, serviceCopy.titles]);
+
+  const periodLabel = (period: Exclude<BookingPeriod, ''>) => {
+    const periodSlots = availabilities.filter((slot) => getBookingPeriod(slot) === period);
+    const label = period === 'matin' ? t('componentUi.morning') : t('componentUi.afternoon');
+    if (periodSlots.length === 0) return t('componentUi.bookingPeriodUnavailable', { period: label });
+    return t('componentUi.bookingPeriodRange', {
+      period: label,
+      first: periodSlots[0].heure,
+      last: periodSlots[periodSlots.length - 1].heure,
+    });
+  };
 
   const selectedActe = useMemo(
     () => actes.find((acte) => acte.id === Number(formData.acte_id)),
@@ -271,18 +273,19 @@ export default function LandingPage() {
       date_heure: slot?.datetime || '',
     }));
     if (periode && !slot) {
-      toast.error(`La période ${periode === 'matin' ? 'du matin' : 'de l’après-midi'} n’est pas disponible pour cette date.`);
+      const period = periode === 'matin' ? t('componentUi.morningPeriod') : t('componentUi.afternoonPeriod');
+      toast.error(t('componentUi.bookingPeriodNotAvailable', { period }));
     }
   };
 
   const handleCallbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (callbackData.nom.trim().length < 2 || !callbackData.telephone.match(/^\+?[0-9 ]{8,15}$/)) {
-      toast.error('Veuillez renseigner un nom et un téléphone valides');
+      toast.error(t('componentUi.callbackInvalidContact'));
       return;
     }
     if (!callbackPrivacyAccepted) {
-      toast.error('Veuillez accepter la notice de confidentialité');
+      toast.error(t('componentUi.acceptPrivacyNotice'));
       return;
     }
     try {
@@ -291,9 +294,9 @@ export default function LandingPage() {
       setCallbackConfirmation(response.data.lead_id);
       setCallbackData({ nom: '', telephone: '', email: '', message: '' });
       setCallbackPrivacyAccepted(false);
-      toast.success('Votre demande de rappel a bien été transmise à la clinique.');
+      toast.success(t('componentUi.callbackRequestSent'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Impossible d’enregistrer votre demande de rappel');
+      toast.error(err.response?.data?.detail || t('componentUi.callbackSaveError'));
     } finally {
       setIsCallbackSubmitting(false);
     }
@@ -303,16 +306,16 @@ export default function LandingPage() {
     e.preventDefault();
 
     if (!formData.telephone.match(/^\+?[0-9 ]{8,15}$/)) {
-      toast.error('Format de téléphone invalide');
+      toast.error(t('componentUi.invalidPhone'));
       return;
     }
 
     if (!formData.date_heure) {
-      toast.error('Veuillez sélectionner un créneau disponible');
+      toast.error(t('componentUi.selectAvailableSlot'));
       return;
     }
     if (!bookingPrivacyAccepted) {
-      toast.error('Veuillez accepter la notice de confidentialité');
+      toast.error(t('componentUi.acceptPrivacyNotice'));
       return;
     }
 
@@ -333,11 +336,10 @@ export default function LandingPage() {
         duplicate: Boolean(confirmation.duplicate),
         status: confirmation.statut,
       });
-      toast.success(
-        confirmation.duplicate
-          ? 'Cette demande existe déjà et attend la confirmation de la clinique.'
-          : 'Demande de rendez-vous reçue — confirmation par la clinique à venir.'
-      );
+      toast.success(confirmation.duplicate
+        ? t('componentUi.bookingDuplicateToast')
+        : t('componentUi.bookingReceivedToast'));
+
       setFormData({
         nom: '',
         prenom: '',
@@ -352,9 +354,9 @@ export default function LandingPage() {
       setAvailabilities([]);
     } catch (err: any) {
       if (err.response?.status === 429) {
-        toast.error('Trop de tentatives. Réessayez dans une minute.');
+        toast.error(t('componentUi.tooManyBookingAttempts'));
       } else {
-        const message = err.response?.data?.detail || 'Erreur lors de la réservation';
+        const message = err.response?.data?.detail || t('componentUi.bookingError');
         toast.error(message);
       }
     } finally {
@@ -366,8 +368,8 @@ export default function LandingPage() {
     <div className="landing-mba min-h-screen bg-[#f5f3ee] text-[#172126]">
       <header className="absolute inset-x-0 top-0 z-50 border-b border-white/15 bg-[#172126]/80 text-white backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
-          <a href="#accueil" className="flex min-w-0 items-center gap-2.5" aria-label={`${clinicName}, accueil`} onClick={() => setIsMobileMenuOpen(false)}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#d7b77a]/60 bg-[#d7b77a]/10 p-1.5 sm:h-12 sm:w-12 sm:p-2"><img src={effectiveBranding?.logo_url || MBA_LOGO_URL} alt="Monogramme MBA Clinic" className="h-full w-full object-contain" /></span>
+          <a href="#accueil" className="flex min-w-0 items-center gap-2.5" aria-label={t('componentUi.clinicHome', { clinic: clinicName })} onClick={() => setIsMobileMenuOpen(false)}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#d7b77a]/60 bg-[#d7b77a]/10 p-1.5 sm:h-12 sm:w-12 sm:p-2"><img src={effectiveBranding?.logo_url || MBA_LOGO_URL} alt={t('componentUi.clinicLogoAlt', { clinic: 'MBA Clinic' })} className="h-full w-full object-contain" /></span>
             <span className="min-w-0"><span className="hidden text-[10px] font-medium uppercase tracking-[0.2em] text-[#f4d99f] sm:block">{t('landing.eyebrow')}</span><span className="block truncate font-serif text-lg font-medium tracking-[0.06em] text-white sm:text-xl">MBA <span className="font-sans text-[0.62em] font-semibold tracking-[0.22em] text-[#f4d99f]">CLINIC</span></span></span>
           </a>
           <nav className="hidden items-center gap-6 text-sm text-white/75 lg:flex" aria-label={t('landing.navLabel')}><a href="#qui-sommes-nous" className="transition hover:text-[#f4d99f]">{t('landing.nav.about')}</a><a href="#nos-actes" className="transition hover:text-[#f4d99f]">{t('landing.nav.services')}</a><a href="#contact" className="transition hover:text-[#f4d99f]">{t('landing.nav.contact')}</a></nav>
@@ -393,13 +395,13 @@ export default function LandingPage() {
           <div className="max-w-2xl">
             <div className="mb-6 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.24em] text-[#f4d99f]">
               <span className="h-px w-10 bg-[#d7b77a]" />
-              {copy.aboutLabel} · {language === 'ar' ? 'تونس' : 'Tunis'}
+              {t('componentUi.landingEyebrowLocation', { section: copy.aboutLabel, city: t('componentUi.tunis') })}
             </div>
             <h2 className="max-w-2xl font-serif text-[2.7rem] font-medium leading-[1.04] tracking-[-0.035em] text-white drop-shadow-sm sm:text-6xl lg:text-7xl">
-              {landingContent?.titre && landingContent.titre !== 'Bienvenue' && language === 'fr' ? landingContent.titre : extraCopy.heroTitle}
+              {heroTitle}
             </h2>
             <p className="mb-6 mt-6 max-w-xl text-lg leading-8 text-white/82 sm:text-xl">
-              {landingContent?.sous_titre && landingContent.sous_titre !== 'Votre clinique esthétique de confiance' && language === 'fr' ? landingContent.sous_titre : extraCopy.heroSubtitle}
+              {heroSubtitle}
             </p>
             <p className="mb-9 max-w-xl text-base leading-7 text-white/68">
               {extraCopy.heroText}
@@ -409,13 +411,13 @@ export default function LandingPage() {
               <a href="#reservation" className="group inline-flex min-h-12 items-center justify-center rounded-full bg-[#f4d99f] px-5 py-3 text-sm font-semibold text-[#172126] shadow-[0_14px_30px_rgba(244,217,159,0.2)] transition hover:bg-white">
                 {copy.book} <ArrowRight className="ml-2 h-4 w-4 transition group-hover:translate-x-1" />
               </a>
-              <a href="#qui-sommes-nous" className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/35 px-5 py-3 text-sm font-semibold text-white transition hover:border-[#f4d99f] hover:text-[#f4d99f]">{language === 'fr' ? 'Découvrir MBA Clinic' : language === 'ar' ? 'اكتشف MBA Clinic' : language === 'it' ? 'Scopri MBA Clinic' : language === 'de' ? 'MBA Clinic entdecken' : 'Discover MBA Clinic'}</a>
+              <a href="#qui-sommes-nous" className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/35 px-5 py-3 text-sm font-semibold text-white transition hover:border-[#f4d99f] hover:text-[#f4d99f]">{t('componentUi.discoverClinic', { clinic: 'MBA Clinic' })}</a>
             </div>
 
             <div className="grid max-w-xl grid-cols-1 gap-3 text-sm text-white/75 sm:grid-cols-3">
-              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#f4d99f]" /> {language === 'fr' ? 'Écoute confidentielle' : language === 'ar' ? 'رعاية سرية' : language === 'it' ? 'Cura riservata' : language === 'de' ? 'Diskrete Betreuung' : 'Confidential care'}</div>
-              <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#f4d99f]" /> {language === 'fr' ? 'Résultats naturels' : language === 'ar' ? 'نتائج طبيعية' : language === 'it' ? 'Risultati naturali' : language === 'de' ? 'Natürlich wirkende Ergebnisse' : 'Natural-looking results'}</div>
-              <div className="flex items-center gap-2"><HeartHandshake className="h-4 w-4 text-[#f4d99f]" /> {language === 'fr' ? 'Suivi personnalisé' : language === 'ar' ? 'متابعة شخصية' : language === 'it' ? 'Follow-up personalizzato' : language === 'de' ? 'Persönliche Nachsorge' : 'Personalised follow-up'}</div>
+              <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#f4d99f]" /> {t('componentUi.confidentialCare')}</div>
+              <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#f4d99f]" /> {t('componentUi.naturalResults')}</div>
+              <div className="flex items-center gap-2"><HeartHandshake className="h-4 w-4 text-[#f4d99f]" /> {t('componentUi.personalizedFollowUp')}</div>
             </div>
           </div>
 
@@ -423,7 +425,7 @@ export default function LandingPage() {
             <CardHeader className="border-b border-[#172126]/10 px-6 pb-5 pt-6 sm:px-8">
               <CardTitle className="flex items-center gap-3 text-lg tracking-tight text-[#172126]">
                 <Calendar className="w-5 h-5" />
-                {language === 'fr' ? 'Réserver un rendez-vous' : language === 'ar' ? 'حجز موعد' : language === 'it' ? 'Prenota un appuntamento' : language === 'de' ? 'Termin buchen' : 'Book an appointment'}
+                {t('componentUi.bookAppointment')}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-6 pb-7 pt-6 sm:px-8">
@@ -433,11 +435,10 @@ export default function LandingPage() {
                   className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
                 >
                   <p className="font-semibold">
-                    {bookingConfirmation.duplicate ? 'Demande déjà enregistrée' : 'Demande reçue'}
+                    {bookingConfirmation.duplicate ? t('componentUi.bookingAlreadyRecorded') : t('componentUi.bookingReceived')}
                   </p>
                   <p className="mt-1">
-                    Référence #{bookingConfirmation.id}. La clinique doit encore confirmer ce créneau ;
-                    l’accueil le retrouvera dans les demandes publiques à traiter.
+                    {t('componentUi.bookingConfirmationDetails', { id: bookingConfirmation.id })}
                   </p>
                 </div>
               )}
@@ -447,16 +448,16 @@ export default function LandingPage() {
                 </div>
               ) : bootstrapError ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  {bootstrapError} Veuillez contacter la clinique pour prendre rendez-vous.
+                  {t('componentUi.bookingTemporarilyUnavailable')}
                 </div>
               ) : praticiens.length === 0 || actes.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  Les disponibilités de réservation seront ouvertes après le paramétrage des médecins et des prestations.
+                  {t('componentUi.bookingNotConfigured')}
                 </div>
               ) : (
                 <>
                   <p className="mb-4 text-sm leading-6 text-muted-foreground">
-                    {language === 'fr' ? 'Cette réservation crée une demande auprès de la clinique. L’accueil vérifiera le créneau, créera ou retrouvera votre dossier, puis vous confirmera le rendez-vous.' : language === 'ar' ? 'يراجع فريق العيادة هذا الطلب ويؤكد التوفر والموعد.' : language === 'it' ? 'Il team della clinica esaminerà la richiesta e confermerà disponibilità e appuntamento.' : language === 'de' ? 'Das Klinikteam prüft die Anfrage und bestätigt Verfügbarkeit und Termin.' : 'This request is reviewed by the clinic team, who will confirm availability and your appointment.'}
+                    {t('componentUi.bookingRequestExplanation')}
                   </p>
                   <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -478,7 +479,7 @@ export default function LandingPage() {
                       type="tel"
                       value={formData.telephone}
                       onChange={handleInputChange}
-                      placeholder="+216 XX XXX XXX"
+                      placeholder={t('componentUi.publicPhonePlaceholder')}
                       required
                     />
                     <p className="text-xs text-muted-foreground mt-1">{formCopy.format}</p>
@@ -556,21 +557,21 @@ export default function LandingPage() {
                           : formCopy.selectTime}
                       </option>
                       <option value="matin" disabled={!availabilities.some((slot) => getBookingPeriod(slot) === 'matin')}>
-                        {periodLabel('matin', availabilities)}
+                        {periodLabel('matin')}
                       </option>
                       <option value="apres_midi" disabled={!availabilities.some((slot) => getBookingPeriod(slot) === 'apres_midi')}>
-                        {periodLabel('apres_midi', availabilities)}
+                        {periodLabel('apres_midi')}
                       </option>
                     </select>
                     {formData.date_heure && formData.periode && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        La clinique proposera un horaire précis dans la période choisie (à partir de {availabilities.find((slot) => slot.datetime === formData.date_heure)?.heure}).
+                        {t('componentUi.selectedPeriodFromTime', { time: availabilities.find((slot) => slot.datetime === formData.date_heure)?.heure })}
                       </p>
                     )}
                     {isSlotsLoading && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
                         <Spinner className="h-3.5 w-3.5" />
-                        Chargement des disponibilités
+                        {t('componentUi.loadingAvailability')}
                       </div>
                     )}
                     {!isSlotsLoading && formData.praticien_id && availabilities.length === 0 && (
@@ -594,7 +595,7 @@ export default function LandingPage() {
                     {isSubmitting ? (
                       <>
                         <Spinner className="mr-2 h-4 w-4" />
-                        Réservation en cours...
+                        {t('componentUi.bookingInProgress')}
                       </>
                     ) : (
                       formCopy.book
@@ -632,14 +633,12 @@ export default function LandingPage() {
             <p className="max-w-md text-sm leading-6 text-[#172126]/60">{copy.servicesIntro}</p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            {(featuredServices.length > 0 ? featuredServices : SERVICE_DETAILS.map((service) => service.title)).slice(0, 3).map((service, index) => {
-              const detail = SERVICE_DETAILS[index];
+            {featuredServices.slice(0, 3).map((service, index) => {
               const isExpanded = expandedService === index;
-              const serviceCopy = LANDING_SERVICES[language] || LANDING_SERVICES.fr;
               const titles = serviceCopy.titles;
               const descriptions = serviceCopy.descriptions;
               const points = serviceCopy.points[index];
-              return <article key={`${service}-${index}`} className="group overflow-hidden rounded-[1.5rem] border border-[#172126]/10 bg-[#fbfaf7] shadow-[0_18px_50px_rgba(23,33,38,0.05)] transition duration-200 hover:-translate-y-1 hover:border-[#d7b77a]/70 hover:shadow-[0_24px_60px_rgba(23,33,38,0.1)]"><img src={SERVICE_IMAGES[index]} alt={isEnglish ? ['Aesthetic consultation in a calm clinic', 'Premium facial treatment in a bright care room', 'Medical aesthetic treatment prepared with precision'][index] : ['Consultation esthétique dans un cabinet calme', 'Soin visage premium dans une cabine lumineuse', 'Préparation précise d’un acte de médecine esthétique'][index]} loading="lazy" className="h-44 w-full object-cover transition duration-500 group-hover:scale-[1.03]" /><div className="p-6"><div className="mb-6 flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#172126] text-[#f4d99f]"><Sparkles className="h-5 w-5" /></span><span className="text-xs font-medium text-[#172126]/35">0{index + 1}</span></div><h4 className="text-xl font-semibold text-[#172126]">{titles[index]}</h4><p className="mt-3 text-sm leading-6 text-[#172126]/60">{descriptions[index]}</p><button type="button" aria-expanded={isExpanded} onClick={() => setExpandedService(isExpanded ? null : index)} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-[#b0884b]">{isExpanded ? copy.hide : copy.discover} <ArrowRight className="ml-2 h-4 w-4 transition group-hover:translate-x-1" /></button>{isExpanded && <div className="mt-5 border-t border-[#172126]/10 pt-4"><ul className="grid gap-2 text-sm text-[#172126]/70">{points.map((point) => <li key={point} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b0884b]" />{point}</li>)}</ul><a href="#reservation" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[#172126] px-4 py-2.5 text-xs font-semibold text-white">{copy.book}<ArrowRight className="ml-2 h-4 w-4" /></a></div>}</div></article>;
+              return <article key={`${service}-${index}`} className="group overflow-hidden rounded-[1.5rem] border border-[#172126]/10 bg-[#fbfaf7] shadow-[0_18px_50px_rgba(23,33,38,0.05)] transition duration-200 hover:-translate-y-1 hover:border-[#d7b77a]/70 hover:shadow-[0_24px_60px_rgba(23,33,38,0.1)]"><img src={SERVICE_IMAGES[index]} alt={[t('componentUi.serviceImageConsultationAlt'), t('componentUi.serviceImageFacialAlt'), t('componentUi.serviceImageInjectionAlt')][index]} loading="lazy" className="h-44 w-full object-cover transition duration-500 group-hover:scale-[1.03]" /><div className="p-6"><div className="mb-6 flex items-center justify-between"><span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#172126] text-[#f4d99f]"><Sparkles className="h-5 w-5" /></span><span className="text-xs font-medium text-[#172126]/35">0{index + 1}</span></div><h4 className="text-xl font-semibold text-[#172126]">{titles[index]}</h4><p className="mt-3 text-sm leading-6 text-[#172126]/60">{descriptions[index]}</p><button type="button" aria-expanded={isExpanded} onClick={() => setExpandedService(isExpanded ? null : index)} className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-[#b0884b]">{isExpanded ? copy.hide : copy.discover} <ArrowRight className="ml-2 h-4 w-4 transition group-hover:translate-x-1" /></button>{isExpanded && <div className="mt-5 border-t border-[#172126]/10 pt-4"><ul className="grid gap-2 text-sm text-[#172126]/70">{points.map((point) => <li key={point} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b0884b]" />{point}</li>)}</ul><a href="#reservation" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[#172126] px-4 py-2.5 text-xs font-semibold text-white">{copy.book}<ArrowRight className="ml-2 h-4 w-4" /></a></div>}</div></article>;
             })}
           </div>
           <div className="mt-8 rounded-[1.5rem] border border-[#d7b77a]/35 bg-[#172126] p-6 text-white sm:p-8">
@@ -655,8 +654,8 @@ export default function LandingPage() {
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
           <div><p className="mb-3 text-xs font-medium uppercase tracking-[0.22em] text-[#f4d99f]">{copy.callbackEyebrow}</p><h3 className="text-3xl font-semibold tracking-tight">{copy.callbackTitle}</h3><p className="mt-3 max-w-lg text-white/70">{copy.callbackText}</p></div>
           <Card className="border-white/10 bg-white/10 text-white"><CardContent className="p-6">
-            {callbackConfirmation && <div className="mb-4 rounded-lg border border-emerald-300/30 bg-emerald-400/10 p-3 text-sm">Demande reçue — référence #{callbackConfirmation}.</div>}
-            <form onSubmit={handleCallbackSubmit} className="grid gap-4 sm:grid-cols-2"><div><Label htmlFor="callback_nom" className="text-white">{copy.callbackName}</Label><Input id="callback_nom" value={callbackData.nom} onChange={(e) => setCallbackData({ ...callbackData, nom: e.target.value })} required className="mt-1 bg-white text-[#172126]" /></div><div><Label htmlFor="callback_telephone" className="text-white">{copy.callbackPhone}</Label><Input id="callback_telephone" type="tel" value={callbackData.telephone} onChange={(e) => setCallbackData({ ...callbackData, telephone: e.target.value })} required className="mt-1 bg-white text-[#172126]" /></div><div className="sm:col-span-2"><Label htmlFor="callback_email" className="text-white">Email ({copy.optional})</Label><Input id="callback_email" type="email" value={callbackData.email} onChange={(e) => setCallbackData({ ...callbackData, email: e.target.value })} className="mt-1 bg-white text-[#172126]" /></div><div className="sm:col-span-2"><Label htmlFor="callback_message" className="text-white">{copy.need} ({copy.optional})</Label><Input id="callback_message" value={callbackData.message} onChange={(e) => setCallbackData({ ...callbackData, message: e.target.value })} className="mt-1 bg-white text-[#172126]" /></div><label className="sm:col-span-2 flex items-start gap-3 text-xs leading-5 text-white/70"><input type="checkbox" checked={callbackPrivacyAccepted} onChange={(event) => setCallbackPrivacyAccepted(event.target.checked)} required className="mt-1 h-4 w-4 rounded border-white/40" /><span>{copy.consentCallback} <a className="underline hover:text-white" href="#confidentialite">{copy.privacy}</a>.</span></label><Button type="submit" disabled={isCallbackSubmitting} className="sm:col-span-2 bg-[#f4d99f] text-[#172126] hover:bg-white">{isCallbackSubmitting ? 'Envoi…' : copy.callbackSubmit}</Button></form>
+            {callbackConfirmation && <div className="mb-4 rounded-lg border border-emerald-300/30 bg-emerald-400/10 p-3 text-sm">{t('componentUi.callbackConfirmation', { id: callbackConfirmation })}</div>}
+            <form onSubmit={handleCallbackSubmit} className="grid gap-4 sm:grid-cols-2"><div><Label htmlFor="callback_nom" className="text-white">{copy.callbackName}</Label><Input id="callback_nom" value={callbackData.nom} onChange={(e) => setCallbackData({ ...callbackData, nom: e.target.value })} required className="mt-1 bg-white text-[#172126]" /></div><div><Label htmlFor="callback_telephone" className="text-white">{copy.callbackPhone}</Label><Input id="callback_telephone" type="tel" value={callbackData.telephone} onChange={(e) => setCallbackData({ ...callbackData, telephone: e.target.value })} required className="mt-1 bg-white text-[#172126]" /></div><div className="sm:col-span-2"><Label htmlFor="callback_email" className="text-white">{t('componentUi.email')} ({copy.optional})</Label><Input id="callback_email" type="email" value={callbackData.email} onChange={(e) => setCallbackData({ ...callbackData, email: e.target.value })} className="mt-1 bg-white text-[#172126]" /></div><div className="sm:col-span-2"><Label htmlFor="callback_message" className="text-white">{copy.need} ({copy.optional})</Label><Input id="callback_message" value={callbackData.message} onChange={(e) => setCallbackData({ ...callbackData, message: e.target.value })} className="mt-1 bg-white text-[#172126]" /></div><label className="sm:col-span-2 flex items-start gap-3 text-xs leading-5 text-white/70"><input type="checkbox" checked={callbackPrivacyAccepted} onChange={(event) => setCallbackPrivacyAccepted(event.target.checked)} required className="mt-1 h-4 w-4 rounded border-white/40" /><span>{copy.consentCallback} <a className="underline hover:text-white" href="#confidentialite">{copy.privacy}</a>.</span></label><Button type="submit" disabled={isCallbackSubmitting} className="sm:col-span-2 bg-[#f4d99f] text-[#172126] hover:bg-white">{isCallbackSubmitting ? t('componentUi.sending') : copy.callbackSubmit}</Button></form>
           </CardContent></Card>
         </div>
       </section>
@@ -671,9 +670,9 @@ export default function LandingPage() {
             <p className="max-w-sm text-sm leading-6 text-[#172126]/60">{copy.contactText}</p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><MapPin className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.location}</p><p className="mt-2 text-lg font-semibold text-[#172126]">{language === 'fr' ? (landingContent?.adresse || clinicCity) : extraCopy.locationDemo}</p><p className="mt-2 text-sm leading-6 text-[#172126]/60">{copy.locationText}</p></CardContent></Card>
-            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><Phone className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.phoneWhatsapp}</p>{clinicPhone ? <a href={`tel:${clinicPhone}`} className="mt-2 block text-lg font-semibold text-[#172126] hover:text-[#b0884b]">{clinicPhone}</a> : <p className="mt-2 text-sm text-[#172126]/60">{language === 'fr' ? 'Coordonnées communiquées par la clinique' : 'Contact details to be configured'}</p>}{clinicWhatsapp && <a href={`https://wa.me/${clinicWhatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center text-sm font-medium text-[#b0884b] hover:underline"><MessageCircle className="mr-2 h-4 w-4" />{copy.writeWhatsapp}</a>}</CardContent></Card>
-            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><Clock className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.availability}</p><p className="mt-2 text-lg font-semibold text-[#172126]">{language === 'fr' ? (landingContent?.horaires || extraCopy.hours) : extraCopy.hours}</p><a href="#reservation" className="mt-2 inline-flex items-center text-sm font-medium text-[#b0884b] hover:underline">{extraCopy.viewSlots} <ArrowRight className="ml-2 h-4 w-4" /></a></CardContent></Card>
+            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><MapPin className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.location}</p><p className="mt-2 text-lg font-semibold text-[#172126]">{clinicAddress}</p><p className="mt-2 text-sm leading-6 text-[#172126]/60">{copy.locationText}</p></CardContent></Card>
+            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><Phone className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.phoneWhatsapp}</p>{clinicPhone ? <a href={`tel:${clinicPhone}`} className="mt-2 block text-lg font-semibold text-[#172126] hover:text-[#b0884b]">{clinicPhone}</a> : <p className="mt-2 text-sm text-[#172126]/60">{t('componentUi.contactDetails')}</p>}{clinicWhatsapp && <a href={`https://wa.me/${clinicWhatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center text-sm font-medium text-[#b0884b] hover:underline"><MessageCircle className="mr-2 h-4 w-4" />{copy.writeWhatsapp}</a>}</CardContent></Card>
+            <Card className="border-[#172126]/10 bg-[#f5f3ee] shadow-none"><CardContent className="p-6"><Clock className="mb-8 h-5 w-5 text-[#b0884b]" /><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#172126]/45">{copy.availability}</p><p className="mt-2 text-lg font-semibold text-[#172126]">{landingContent?.horaires || t('componentUi.defaultOpeningHours')}</p><a href="#reservation" className="mt-2 inline-flex items-center text-sm font-medium text-[#b0884b] hover:underline">{extraCopy.viewSlots} <ArrowRight className="ml-2 h-4 w-4" /></a></CardContent></Card>
           </div>
         </div>
       </section>
@@ -710,20 +709,20 @@ export default function LandingPage() {
       <section id="confidentialite" className="bg-[#fbfaf7] px-5 py-8 text-sm text-[#172126]/75 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-7xl">
           <h3 className="font-semibold text-[#172126]">{copy.privacyTitle}</h3>
-          <p className="mt-2 max-w-3xl leading-6">Les informations transmises sur cette page servent uniquement à traiter votre demande de rendez-vous ou de rappel. Elles sont communiquées à la clinique sélectionnée et conservées pendant la durée nécessaire à ce traitement, conformément à sa politique de confidentialité. Vous pouvez demander l’accès, la rectification ou la suppression de vos données auprès de la clinique.</p>
+          <p className="mt-2 max-w-3xl leading-6">{t('componentUi.privacyText')}</p>
         </div>
       </section>
 
       <footer className="border-t border-[#f4d99f]/15 bg-[#172126] px-5 py-10 text-white/65 sm:px-8 lg:px-12">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div><div className="flex items-center gap-3"><img src={effectiveBranding?.logo_url || MBA_LOGO_URL} alt="Monogramme MBA Clinic" className="h-10 w-10 object-contain" /><span className="font-serif text-lg tracking-[0.08em] text-white">MBA <span className="font-sans text-[0.62em] font-semibold tracking-[0.25em] text-[#f4d99f]">CLINIC</span></span></div><p className="mt-3 text-xs text-white/45">{copy.footerTagline}</p></div>
+          <div><div className="flex items-center gap-3"><img src={effectiveBranding?.logo_url || MBA_LOGO_URL} alt={t('componentUi.clinicLogoAlt', { clinic: 'MBA Clinic' })} className="h-10 w-10 object-contain" /><span className="font-serif text-lg tracking-[0.08em] text-white">MBA <span className="font-sans text-[0.62em] font-semibold tracking-[0.25em] text-[#f4d99f]">CLINIC</span></span></div><p className="mt-3 text-xs text-white/45">{copy.footerTagline}</p></div>
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <a href="#qui-sommes-nous" className="hover:text-white">{extraCopy.footerAbout}</a>
             <a href="#nos-actes" className="hover:text-white">{extraCopy.footerServices}</a>
             <a href="#contact" className="hover:text-white">{extraCopy.footerContact}</a>
-            {landingContent?.instagram && <a href={landingContent.instagram} target="_blank" rel="noreferrer" className="hover:text-white">Instagram</a>}
-            {landingContent?.facebook && <a href={landingContent.facebook} target="_blank" rel="noreferrer" className="hover:text-white">Facebook</a>}
-            {landingContent?.email && <a href={`mailto:${landingContent.email}`} className="hover:text-white">Email</a>}
+            {landingContent?.instagram && <a href={landingContent.instagram} target="_blank" rel="noreferrer" className="hover:text-white">{t('componentUi.socialInstagram')}</a>}
+            {landingContent?.facebook && <a href={landingContent.facebook} target="_blank" rel="noreferrer" className="hover:text-white">{t('componentUi.socialFacebook')}</a>}
+            {landingContent?.email && <a href={`mailto:${landingContent.email}`} className="hover:text-white">{t('componentUi.socialEmail')}</a>}
           </div>
           <p className="text-xs text-white/40 md:text-right">© {new Date().getFullYear()} {clinicName}</p>
         </div>

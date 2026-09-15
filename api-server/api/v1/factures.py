@@ -144,6 +144,7 @@ async def payer_facture_route(
         result = await marquer_payee(
             facture_id, payload.mode_paiement, db,
             clinic_id=current_user["clinic_id"],
+            encaisse_par_id=current_user["id"],
         )
         # Log Audit Financier
         audit = AuditLogFinancial(

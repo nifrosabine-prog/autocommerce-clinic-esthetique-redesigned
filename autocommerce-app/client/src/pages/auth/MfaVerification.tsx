@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -23,13 +24,14 @@ export default function MfaVerification() {
   const { verifyMfa, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { branding } = useBranding();
+  const { t } = useTranslation();
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const challengeToken = getMfaChallengeToken();
 
   useEffect(() => {
     if (!challengeToken) {
-      toast.error('Session expirée, veuillez vous reconnecter');
+      toast.error(t('auth.sessionExpired'));
       setLocation('/login');
     }
   }, [challengeToken, setLocation]);
@@ -39,7 +41,7 @@ export default function MfaVerification() {
     setError('');
 
     if (otp.length !== 6) {
-      setError('Le code doit contenir 6 chiffres');
+      setError(t('auth.mfaCodeLength'));
       return;
     }
     if (!challengeToken) {
@@ -53,8 +55,8 @@ export default function MfaVerification() {
     } catch (err: any) {
       const message =
         err.response?.status === 429
-          ? 'Trop de tentatives. Compte verrouillé temporairement.'
-          : err.response?.data?.detail || 'Code invalide. Veuillez réessayer.';
+          ? t('auth.mfaLocked')
+          : err.response?.data?.detail || t('auth.mfaInvalid');
       setError(message);
     }
   };
@@ -67,9 +69,9 @@ export default function MfaVerification() {
             <Shield className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-2xl">{branding?.nom_clinique || 'Clinique'}</CardTitle>
+            <CardTitle className="text-2xl">{branding?.nom_clinique || t('auth.clinic')}</CardTitle>
             <CardDescription>
-              Vérification en deux étapes
+              {t('auth.mfaTitle')}
             </CardDescription>
           </div>
         </CardHeader>
@@ -78,7 +80,7 @@ export default function MfaVerification() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2 text-center">
               <p className="text-sm text-muted-foreground">
-                Saisissez le code à 6 chiffres généré par votre application d'authentification.
+                {t('auth.mfaInstructions')}
               </p>
             </div>
 
@@ -116,16 +118,16 @@ export default function MfaVerification() {
               {isLoading ? (
                 <>
                   <Spinner className="mr-2 h-4 w-4" />
-                  Vérification...
+                  {t('auth.mfaVerifying')}
                 </>
               ) : (
-                'Vérifier'
+                t('auth.mfaVerify')
               )}
             </Button>
           </form>
 
           <p className="text-xs text-muted-foreground text-center mt-4">
-            Si vous n'avez pas accès à votre code, contactez l'administrateur.
+            {t('auth.mfaNoAccess')}
           </p>
         </CardContent>
       </Card>

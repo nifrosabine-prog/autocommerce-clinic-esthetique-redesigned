@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const { branding, applyTheme } = useBranding();
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -39,7 +41,7 @@ export default function SettingsPage() {
       const res = await api.get('/settings/currency');
       setCurrency(res.data);
     } catch (err) {
-      console.error('Erreur lors du chargement de la devise');
+      console.error('settings.currencyLoadFailed');
     }
   };
 
@@ -82,26 +84,26 @@ export default function SettingsPage() {
       // Update branding settings
       const response = await settingsApi.updateBranding(formData);
       applyTheme(response.data);
-      toast.success('Paramètres sauvegardés');
+      toast.success(t('settings.saved'));
 
       // Upload logo if selected
       if (logoFile) {
         try {
           await settingsApi.uploadLogo(logoFile);
-          toast.success('Logo téléchargé');
+          toast.success(t('settings.logoUploaded'));
           setLogoFile(null);
           if (heroFile) {
         await settingsApi.uploadHero(heroFile);
-        toast.success('Photo de présentation téléchargée');
+        toast.success(t('settings.heroUploaded'));
         setHeroFile(null);
       }
     } catch (err: any) {
-          const message = err.response?.data?.detail || 'Erreur lors du téléchargement du logo';
+          const message = err.response?.data?.detail || t('settings.errors.logoUpload');
           toast.error(message);
         }
       }
     } catch (err: any) {
-      const message = err.response?.data?.detail || 'Erreur lors de la sauvegarde';
+      const message = err.response?.data?.detail || t('settings.errors.save');
       toast.error(message);
     } finally {
       setIsSaving(false);
@@ -122,8 +124,8 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="space-y-6 max-w-2xl">
         <div>
-          <h1 className="text-3xl font-bold">Paramètres</h1>
-          <p className="text-muted-foreground mt-1">Configuration du branding et de la clinique</p>
+          <h1 className="text-3xl font-bold">{t('settings.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('settings.subtitle')}</p>
         </div>
 
         <Card className="border-blue-200 bg-blue-50/60">
@@ -133,34 +135,34 @@ export default function SettingsPage() {
                 <ClipboardList className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="font-semibold text-blue-950">Configuration des actes médicaux</h2>
-                <p className="mt-1 text-sm text-blue-900/75">Gérez le catalogue des soins, les durées et les tarifs utilisés pour les rendez-vous et la facturation.</p>
+                <h2 className="font-semibold text-blue-950">{t('settings.actsTitle')}</h2>
+                <p className="mt-1 text-sm text-blue-900/75">{t('settings.actsDesc')}</p>
               </div>
             </div>
             <Button type="button" onClick={() => setLocation('/settings/actes')} className="shrink-0">
-              Gérer les actes
+              {t('settings.manageActs')}
             </Button>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Informations générales</CardTitle>
+            <CardTitle>{t('settings.generalInfo')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="nom_clinique">Nom de la clinique</Label>
+              <Label htmlFor="nom_clinique">{t('settings.clinicName')}</Label>
               <Input
                 id="nom_clinique"
                 name="nom_clinique"
                 value={formData.nom_clinique || ''}
                 onChange={handleInputChange}
-                placeholder="Nom de votre clinique"
+                placeholder={t('settings.clinicNamePh')}
               />
             </div>
 
             <div>
-              <Label>Logo</Label>
+              <Label>{t('settings.logo')}</Label>
               <div className="flex items-center gap-4">
                 {branding.logo_url && (
                   <img src={branding.logo_url} alt="Logo" className="h-16 w-16 object-contain border rounded" />
@@ -172,7 +174,7 @@ export default function SettingsPage() {
                     onChange={handleLogoChange}
                     className="cursor-pointer"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG (max 2 Mo)</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t('settings.logoHint')}</p>
                 </div>
               </div>
             </div>
@@ -181,12 +183,12 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Devise Globale</CardTitle>
+            <CardTitle>{t('settings.currencyTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="currency_code">Code Devise (ex: TND, EUR)</Label>
+                <Label htmlFor="currency_code">{t('settings.currencyCode')}</Label>
                 <Input
                   id="currency_code"
                   value={currency.currency_code}
@@ -195,7 +197,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="currency_symbol">Symbole (ex: DT, €)</Label>
+                <Label htmlFor="currency_symbol">{t('settings.currencySymbol')}</Label>
                 <Input
                   id="currency_symbol"
                   value={currency.currency_symbol}
@@ -205,23 +207,22 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="font-medium">Important — historique financier</p>
+              <p className="font-medium">{t('settings.currencyWarningTitle')}</p>
               <p className="mt-1 text-amber-900/80">
-                Le changement de devise s’applique uniquement aux nouvelles opérations. Les factures existantes conservent leur montant,
-                leur devise, leur TVA et leur historique d’origine. Aucune conversion automatique n’est effectuée.
+                {t('settings.currencyWarning')}
               </p>
             </div>
-            <p className="text-xs text-muted-foreground">Cette devise sera utilisée pour les nouveaux actes, nouvelles factures et nouveaux rapports.</p>
+            <p className="text-xs text-muted-foreground">{t('settings.currencyNote')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Couleurs</CardTitle>
+            <CardTitle>{t('settings.colorsTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="couleur_primaire">Couleur primaire</Label>
+              <Label htmlFor="couleur_primaire">{t('settings.primaryColor')}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="couleur_primaire"
@@ -243,7 +244,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <Label htmlFor="couleur_secondaire">Couleur secondaire</Label>
+              <Label htmlFor="couleur_secondaire">{t('settings.secondaryColor')}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="couleur_secondaire"
@@ -268,61 +269,61 @@ export default function SettingsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Contenu de la landing page</CardTitle>
+            <CardTitle>{t('settings.landingTitle')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="contenu_titre">Titre</Label>
+              <Label htmlFor="contenu_titre">{t('settings.titleLabel')}</Label>
               <Input
                 id="contenu_titre"
                 name="contenu_titre"
                 value={formData.contenu_landing?.titre || ''}
                 onChange={handleInputChange}
-                placeholder="Titre de votre clinique"
+                placeholder={t('settings.titlePh')}
               />
             </div>
 
             <div>
-              <Label htmlFor="contenu_sous_titre">Sous-titre</Label>
+              <Label htmlFor="contenu_sous_titre">{t('settings.subtitleLabel')}</Label>
               <Input
                 id="contenu_sous_titre"
                 name="contenu_sous_titre"
                 value={formData.contenu_landing?.sous_titre || ''}
                 onChange={handleInputChange}
-                placeholder="Sous-titre"
+                placeholder={t('settings.subtitlePh')}
               />
             </div>
 
             <div>
-              <Label htmlFor="contenu_adresse">Adresse</Label>
+              <Label htmlFor="contenu_adresse">{t('settings.addressLabel')}</Label>
               <Input
                 id="contenu_adresse"
                 name="contenu_adresse"
                 value={formData.contenu_landing?.adresse || ''}
                 onChange={handleInputChange}
-                placeholder="Adresse de la clinique"
+                placeholder={t('settings.addressPh')}
               />
             </div>
 
             <div>
-              <Label htmlFor="contenu_telephone">Téléphone</Label>
+              <Label htmlFor="contenu_telephone">{t('settings.phoneLabel')}</Label>
               <Input
                 id="contenu_telephone"
                 name="contenu_telephone"
                 value={formData.contenu_landing?.telephone || ''}
                 onChange={handleInputChange}
-                placeholder="Numéro de téléphone"
+                placeholder={t('settings.phonePh')}
               />
             </div>
 
             <div>
-              <Label htmlFor="contenu_horaires">Horaires</Label>
+              <Label htmlFor="contenu_horaires">{t('settings.hoursLabel')}</Label>
               <Textarea
                 id="contenu_horaires"
                 name="contenu_horaires"
                 value={formData.contenu_landing?.horaires || ''}
                 onChange={handleInputChange}
-                placeholder="Horaires d'ouverture"
+                placeholder={t('settings.hoursPh')}
                 rows={3}
               />
             </div>
@@ -331,19 +332,19 @@ export default function SettingsPage() {
 
 
         <Card>
-          <CardHeader><CardTitle>Présentation, coordonnées et réseaux sociaux</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t('settings.socialTitle')}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div><Label htmlFor="contenu_description_longue">Présentation longue</Label><Textarea id="contenu_description_longue" name="contenu_description_longue" value={formData.contenu_landing?.description_longue || ''} onChange={handleInputChange} rows={5} placeholder="Présentez l’expertise et les engagements de la clinique." /></div>
-            <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="contenu_ville">Ville</Label><Input id="contenu_ville" name="contenu_ville" value={formData.contenu_landing?.ville || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_email">Email</Label><Input id="contenu_email" name="contenu_email" type="email" value={formData.contenu_landing?.email || ''} onChange={handleInputChange} /></div></div>
-            <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="contenu_whatsapp">WhatsApp</Label><Input id="contenu_whatsapp" name="contenu_whatsapp" value={formData.contenu_landing?.whatsapp || ''} onChange={handleInputChange} placeholder="216XXXXXXXX" /></div><div><Label htmlFor="contenu_photo_hero_url">URL photo hero (facultatif)</Label><Input id="contenu_photo_hero_url" name="contenu_photo_hero_url" value={formData.contenu_landing?.photo_hero_url || ''} onChange={handleInputChange} /></div></div>
-            <div className="grid gap-4 md:grid-cols-3"><div><Label htmlFor="contenu_instagram">Instagram</Label><Input id="contenu_instagram" name="contenu_instagram" value={formData.contenu_landing?.instagram || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_facebook">Facebook</Label><Input id="contenu_facebook" name="contenu_facebook" value={formData.contenu_landing?.facebook || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_tiktok">TikTok</Label><Input id="contenu_tiktok" name="contenu_tiktok" value={formData.contenu_landing?.tiktok || ''} onChange={handleInputChange} /></div></div>
-            <div><Label>Photo de présentation</Label><Input type="file" accept="image/*" onChange={handleHeroChange} className="cursor-pointer" /><p className="text-xs text-muted-foreground mt-1">JPG, PNG ou WebP, 2 Mo maximum.</p></div>
+            <div><Label htmlFor="contenu_description_longue">{t('settings.longPresentation')}</Label><Textarea id="contenu_description_longue" name="contenu_description_longue" value={formData.contenu_landing?.description_longue || ''} onChange={handleInputChange} rows={5} placeholder={t('settings.presentationPh')} /></div>
+            <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="contenu_ville">{t('settings.city')}</Label><Input id="contenu_ville" name="contenu_ville" value={formData.contenu_landing?.ville || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_email">{t('settings.email')}</Label><Input id="contenu_email" name="contenu_email" type="email" value={formData.contenu_landing?.email || ''} onChange={handleInputChange} /></div></div>
+            <div className="grid gap-4 md:grid-cols-2"><div><Label htmlFor="contenu_whatsapp">{t('settings.whatsapp')}</Label><Input id="contenu_whatsapp" name="contenu_whatsapp" value={formData.contenu_landing?.whatsapp || ''} onChange={handleInputChange} placeholder="216XXXXXXXX" /></div><div><Label htmlFor="contenu_photo_hero_url">{t('settings.heroUrl')}</Label><Input id="contenu_photo_hero_url" name="contenu_photo_hero_url" value={formData.contenu_landing?.photo_hero_url || ''} onChange={handleInputChange} /></div></div>
+            <div className="grid gap-4 md:grid-cols-3"><div><Label htmlFor="contenu_instagram">{t('settings.instagram')}</Label><Input id="contenu_instagram" name="contenu_instagram" value={formData.contenu_landing?.instagram || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_facebook">{t('settings.facebook')}</Label><Input id="contenu_facebook" name="contenu_facebook" value={formData.contenu_landing?.facebook || ''} onChange={handleInputChange} /></div><div><Label htmlFor="contenu_tiktok">{t('settings.tiktok')}</Label><Input id="contenu_tiktok" name="contenu_tiktok" value={formData.contenu_landing?.tiktok || ''} onChange={handleInputChange} /></div></div>
+            <div><Label>{t('settings.heroPhoto')}</Label><Input type="file" accept="image/*" onChange={handleHeroChange} className="cursor-pointer" /><p className="text-xs text-muted-foreground mt-1">{t('settings.heroHint')}</p></div>
           </CardContent>
         </Card>
 
         <div className="flex gap-2">
           <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+            {isSaving ? t('settings.saving') : t('settings.save')}
           </Button>
         </div>
       </div>

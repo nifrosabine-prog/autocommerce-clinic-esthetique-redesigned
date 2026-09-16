@@ -197,6 +197,11 @@ function Router() {
           <SettingsPage />
         </ProtectedRoute>
       </Route>
+      <Route path="/settings/branding">
+        <ProtectedRoute requiredRoles={['directrice', 'admin']}>
+          <SettingsPage />
+        </ProtectedRoute>
+      </Route>
       <Route path="/pricing"><PricingRedirect /></Route>
       <Route path="/settings/actes">
         <ProtectedRoute requiredRoles={['directrice', 'admin']}>

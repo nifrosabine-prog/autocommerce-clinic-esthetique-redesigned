@@ -472,8 +472,12 @@ export const photosApi = {
     });
   },
 
-  delete: (patientId: number, photoId: number) =>
-    api.delete(`/patients/${patientId}/photos/${photoId}`),
+  delete: (
+    patientId: number,
+    photoId: number,
+    raison = 'Suppression demandée par le médecin',
+  ) =>
+    api.delete(`/patients/${patientId}/photos/${photoId}`, { params: { raison } }),
 
   /** Récupère les photos avant/après pour comparaison côte-à-côte.
    *  Utilise l'endpoint backend dédié qui retourne { avant: [...], apres: [...] }.

@@ -458,7 +458,7 @@ async def soft_delete_photo(
     patient_id: int,
     photo_id: int,
     request: Request,
-    raison: str = Query(..., min_length=5),
+    raison: str = Query("Suppression demandée par le médecin", min_length=5),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_role(RoleEnum.MEDECIN)),
 ):
